@@ -39,6 +39,105 @@ const init = mutation({
 });
 export default init;
 
+export const reset = mutation({
+  handler: async (ctx) => {
+    const worldStatus = await ctx.db
+      .query('worldStatus')
+      .filter((q) => q.eq(q.field('isDefault'), true))
+      .unique();
+    if (!worldStatus) {
+      return;
+    }
+    const worldId = worldStatus.worldId;
+    const engineId = worldStatus.engineId;
+
+    {
+      const docs = await ctx.db
+        .query('messages')
+        .withIndex('worldIdOnly', (q) => q.eq('worldId', worldId))
+        .collect();
+      for (const d of docs) await ctx.db.delete(d._id);
+    }
+    {
+      const docs = await ctx.db
+        .query('maps')
+        .withIndex('worldId', (q) => q.eq('worldId', worldId))
+        .collect();
+      for (const d of docs) await ctx.db.delete(d._id);
+    }
+    {
+      const docs = await ctx.db
+        .query('playerDescriptions')
+        .withIndex('worldId', (q) => q.eq('worldId', worldId))
+        .collect();
+      for (const d of docs) await ctx.db.delete(d._id);
+    }
+    {
+      const docs = await ctx.db
+        .query('agentDescriptions')
+        .withIndex('worldId', (q) => q.eq('worldId', worldId))
+        .collect();
+      for (const d of docs) await ctx.db.delete(d._id);
+    }
+    {
+      const docs = await ctx.db
+        .query('archivedPlayers')
+        .withIndex('worldId', (q) => q.eq('worldId', worldId))
+        .collect();
+      for (const d of docs) await ctx.db.delete(d._id);
+    }
+    {
+      const docs = await ctx.db
+        .query('archivedAgents')
+        .withIndex('worldId', (q) => q.eq('worldId', worldId))
+        .collect();
+      for (const d of docs) await ctx.db.delete(d._id);
+    }
+    {
+      const docs = await ctx.db
+        .query('archivedConversations')
+        .withIndex('worldId', (q) => q.eq('worldId', worldId))
+        .collect();
+      for (const d of docs) await ctx.db.delete(d._id);
+    }
+    {
+      const docs = await ctx.db
+        .query('participatedTogether')
+        .filter((q) => q.eq(q.field('worldId'), worldId))
+        .collect();
+      for (const d of docs) await ctx.db.delete(d._id);
+    }
+
+    const worldDoc = await ctx.db.get(worldId);
+    if (worldDoc) await ctx.db.delete(worldId);
+
+    {
+      const docs = await ctx.db
+        .query('inputs')
+        .withIndex('byInputNumber', (q) => q.eq('engineId', engineId))
+        .collect();
+      for (const d of docs) await ctx.db.delete(d._id);
+    }
+    const engineDoc = await ctx.db.get(engineId);
+    if (engineDoc) await ctx.db.delete(engineId);
+
+    await ctx.db.delete(worldStatus._id);
+
+    {
+      const docs = await ctx.db.query('memories').collect();
+      for (const d of docs) await ctx.db.delete(d._id);
+    }
+    {
+      const docs = await ctx.db.query('memoryEmbeddings').collect();
+      for (const d of docs) await ctx.db.delete(d._id);
+    }
+    {
+      const docs = await ctx.db.query('embeddingsCache').collect();
+      for (const d of docs) await ctx.db.delete(d._id);
+    }
+  },
+});
+
 async function getOrCreateDefaultWorld(ctx: MutationCtx) {
   const now = Date.now();
 

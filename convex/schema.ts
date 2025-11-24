@@ -19,6 +19,7 @@ export default defineSchema({
     worldId: v.optional(v.id('worlds')),
   })
     .index('conversationId', ['worldId', 'conversationId'])
+    .index('worldIdOnly', ['worldId'])
     .index('messageUuid', ['conversationId', 'messageUuid']),
 
   ...agentTables,

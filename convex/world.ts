@@ -227,6 +227,114 @@ export const gameDescriptions = query({
   },
 });
 
+export const generationBudget = query({
+  args: {
+    worldId: v.id('worlds'),
+  },
+  handler: async (ctx, args) => {
+    const world = await ctx.db.get(args.worldId);
+    if (!world) {
+      throw new Error(`Invalid world ID: ${args.worldId}`);
+    }
+    const worldStatus = await ctx.db
+      .query('worldStatus')
+      .withIndex('worldId', (q) => q.eq('worldId', args.worldId))
+      .unique();
+    if (!worldStatus) {
+      throw new Error(`Invalid world status ID: ${args.worldId}`);
+    }
+    let totalMessages = 0;
+    for (const conv of world.conversations) {
+      totalMessages += conv.numMessages || 0;
+    }
+    const archived = await ctx.db
+      .query('archivedConversations')
+      .withIndex('worldId', (q) => q.eq('worldId', args.worldId))
+      .collect();
+    for (const conv of archived) {
+      totalMessages += conv.numMessages || 0;
+    }
+    const bucket = Math.floor(totalMessages / 200);
+    const lastGenerationBucket = worldStatus.lastGenerationBucket ?? -1;
+    return { totalMessages, bucket, lastGenerationBucket };
+  },
+});
+
+export const setGenerationBucket = mutation({
+  args: {
+    worldId: v.id('worlds'),
+    bucket: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const worldStatus = await ctx.db
+      .query('worldStatus')
+      .withIndex('worldId', (q) => q.eq('worldId', args.worldId))
+      .unique();
+    if (!worldStatus) {
+      throw new Error(`Invalid world status ID for world ${args.worldId}`);
+    }
+    await ctx.db.patch(worldStatus._id, { lastGenerationBucket: args.bucket });
+  },
+});
+
+export const generationBudget = query({
+  args: {
+    worldId: v.id('worlds'),
+  },
+  handler: async (ctx, args) => {
+    const world = await ctx.db.get(args.worldId);
+    if (!world) {
+      throw new Error(`Invalid world ID: ${args.worldId}`);
+    }
+    const worldStatus = await ctx.db
+      .query('worldStatus')
+      .withIndex('worldId', (q) => q.eq('worldId', args.worldId))
+      .unique();
+    if (!worldStatus) {
+      throw new Error(`Invalid world status ID: ${args.worldId}`);
+    }
+    let totalMessages = 0;
+    for (const conv of world.conversations) {
+      totalMessages += conv.numMessages || 0;
+    }
+    const archived = await ctx.db
+      .query('archivedConversations')
+      .withIndex('worldId', (q) => q.eq('worldId', args.worldId))
+      .collect();
+    for (const conv of archived) {
+      totalMessages += conv.numMessages || 0;
+    }
+    const bucket = Math.floor(totalMessages / 200);
+    const lastGenerationBucket = worldStatus.lastGenerationBucket ?? -1;
+    const windowStart = worldStatus.generationWindowStart ?? 0;
+    const windowCount = worldStatus.generationWindowCount ?? 0;
+    return { totalMessages, bucket, lastGenerationBucket, windowStart, windowCount };
+  },
+});
+
+export const setGenerationBucket = mutation({
+  args: {
+    worldId: v.id('worlds'),
+    bucket: v.number(),
+    windowStart: v.number(),
+    windowCount: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const worldStatus = await ctx.db
+      .query('worldStatus')
+      .withIndex('worldId', (q) => q.eq('worldId', args.worldId))
+      .unique();
+    if (!worldStatus) {
+      throw new Error(`Invalid world status ID for world ${args.worldId}`);
+    }
+    await ctx.db.patch(worldStatus._id, {
+      lastGenerationBucket: args.bucket,
+      generationWindowStart: args.windowStart,
+      generationWindowCount: args.windowCount,
+    });
+  },
+});
+
 export const previousConversation = query({
   args: {
     worldId: v.id('worlds'),

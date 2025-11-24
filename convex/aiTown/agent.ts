@@ -76,7 +76,9 @@ export class Agent {
     // If we have been wandering but haven't thought about something to do for
     // a while, do something.
     if (!conversation && !doingActivity && (!player.pathfinding || !recentlyAttemptedInvite)) {
-      this.startOperation(game, now, 'agentDoSomething', {
+      const hasInventory = (player as any).inventory && (player as any).inventory.length > 0;
+      const opName = hasInventory ? 'agentHandleInventory' : 'agentDoSomething';
+      this.startOperation(game, now, opName as any, {
         worldId: game.worldId,
         player: player.serialize(),
         otherFreePlayers: [...game.world.players.values()]
@@ -297,6 +299,9 @@ export async function runAgentOperation(ctx: MutationCtx, operation: string, arg
       break;
     case 'agentDoSomething':
       reference = internal.aiTown.agentOperations.agentDoSomething;
+      break;
+    case 'agentHandleInventory':
+      reference = internal.aiTown.agentOperations.agentHandleInventory;
       break;
     default:
       throw new Error(`Unknown operation: ${operation}`);

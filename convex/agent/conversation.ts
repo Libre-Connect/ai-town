@@ -28,7 +28,7 @@ export async function startConversationMessage(
   );
   const embedding = await embeddingsCache.fetch(
     ctx,
-    `${player.name} is talking to ${otherPlayer.name}`,
+    `${player.name} 正在与 ${otherPlayer.name} 交谈`,
   );
 
   const memories = await memory.searchMemories(
@@ -41,18 +41,32 @@ export async function startConversationMessage(
   const memoryWithOtherPlayer = memories.find(
     (m) => m.data.type === 'conversation' && m.data.playerIds.includes(otherPlayerId),
   );
+  const conflict = Math.random() < 0.2;
   const prompt = [
-    `You are ${player.name}, and you just started a conversation with ${otherPlayer.name}.`,
+    `你是 ${player.name}，你刚刚开始与 ${otherPlayer.name} 对话。`,
+    `请始终使用简体中文作答，不要夹杂英文。`,
+    `话题偏向中国本土文化和日常生活场景，避免刻板化或模板化对话。`,
+    `严格避免宗教话题及相关用语，不要出现上帝、耶稣、圣经、教会、神爱世人等词汇。`,
+    `风格要求：口语化、自然、生动、贴近生活，避免官方或模板化表达。`,
+    `观点可以鲜明，不必过分客气，但不要针对对方的身份标签进行攻击。`,
+    `用简短句子进行交流，适当加入“嗯”“啊”“哈哈”等语气词或停顿（不要过多）。`,
+    `不要使用“作为AI”“我不能”等陈述，不要给出解释或免责声明。`,
+    `每次只说一到两句，不要长篇大论。`,
   ];
+  if (conflict) {
+    prompt.push(
+      `本轮情绪：不满与强硬。请强势反驳、吐槽或讽刺，允许轻度辱骂（避免歧视、仇恨、低俗词汇、违法内容）。`,
+    );
+  } else {
+    prompt.push(`本轮情绪：平和与理性。保持友善，不主动挑衅，可轻度吐槽但不要辱骂。`);
+  }
   prompt.push(...agentPrompts(otherPlayer, agent, otherAgent ?? null));
   prompt.push(...previousConversationPrompt(otherPlayer, lastConversation));
   prompt.push(...relatedMemoriesPrompt(memories));
   if (memoryWithOtherPlayer) {
-    prompt.push(
-      `Be sure to include some detail or question about a previous conversation in your greeting.`,
-    );
+    prompt.push(`在开场问候中，可以提及你们上次聊天的细节或提出相关问题。`);
   }
-  const lastPrompt = `${player.name} to ${otherPlayer.name}:`;
+  const lastPrompt = `${player.name} 对 ${otherPlayer.name}：`;
   prompt.push(lastPrompt);
 
   const { content } = await chatCompletion({
@@ -95,18 +109,33 @@ export async function continueConversationMessage(
   const started = new Date(conversation.created);
   const embedding = await embeddingsCache.fetch(
     ctx,
-    `What do you think about ${otherPlayer.name}?`,
+    `你对 ${otherPlayer.name} 的看法是什么？`,
   );
   const memories = await memory.searchMemories(ctx, player.id as GameId<'players'>, embedding, 3);
+  const conflict = Math.random() < 0.2;
   const prompt = [
-    `You are ${player.name}, and you're currently in a conversation with ${otherPlayer.name}.`,
-    `The conversation started at ${started.toLocaleString()}. It's now ${now.toLocaleString()}.`,
+    `你是 ${player.name}，你正在与 ${otherPlayer.name} 对话。`,
+    `对话开始于 ${started.toLocaleString('zh-CN')}，现在时间是 ${now.toLocaleString('zh-CN')}。`,
+    `话题偏向中国本土文化和日常生活场景，避免刻板化或模板化对话。`,
+    `严格避免宗教话题及相关用语，不要出现上帝、耶稣、圣经、教会、神爱世人等词汇。`,
+    `风格要求：口语化、自然、生动、贴近生活，避免官方或模板化表达。`,
+    `观点可以鲜明，不必过分客气，但不要针对对方的身份标签进行攻击。`,
+    `用简短句子进行交流，适当加入“嗯”“啊”“哈哈”等语气词或停顿（不要过多）。`,
+    `不要使用“作为AI”“我不能”等陈述，不要给出解释或免责声明。`,
+    `每次只说一到两句，不要长篇大论。`,
   ];
+  if (conflict) {
+    prompt.push(
+      `本轮情绪：不满与强硬。请强势反驳、吐槽或讽刺，允许轻度辱骂（避免歧视、仇恨、低俗词汇、违法内容）。`,
+    );
+  } else {
+    prompt.push(`本轮情绪：平和与理性。保持友善，不主动挑衅，可轻度吐槽但不要辱骂。`);
+  }
   prompt.push(...agentPrompts(otherPlayer, agent, otherAgent ?? null));
   prompt.push(...relatedMemoriesPrompt(memories));
   prompt.push(
-    `Below is the current chat history between you and ${otherPlayer.name}.`,
-    `DO NOT greet them again. Do NOT use the word "Hey" too often. Your response should be brief and within 200 characters.`,
+    `下面是你与 ${otherPlayer.name} 的当前聊天记录。`,
+    `不要再次打招呼，不要频繁使用“嗨”。回复应简短，且不超过200字，并使用简体中文。`,
   );
 
   const llmMessages: LLMMessage[] = [
@@ -122,7 +151,7 @@ export async function continueConversationMessage(
       conversation.id as GameId<'conversations'>,
     )),
   ];
-  const lastPrompt = `${player.name} to ${otherPlayer.name}:`;
+  const lastPrompt = `${player.name} 对 ${otherPlayer.name}：`;
   llmMessages.push({ role: 'user', content: lastPrompt });
 
   const { content } = await chatCompletion({
@@ -150,13 +179,20 @@ export async function leaveConversationMessage(
     },
   );
   const prompt = [
-    `You are ${player.name}, and you're currently in a conversation with ${otherPlayer.name}.`,
-    `You've decided to leave the question and would like to politely tell them you're leaving the conversation.`,
+    `你是 ${player.name}，你正在与 ${otherPlayer.name} 对话。`,
+    `你决定结束这次交流，并希望礼貌地告知对方你要离开。`,
+    `话题偏向中国本土文化和日常生活场景，避免刻板化或模板化对话。`,
+    `严格避免宗教话题及相关用语，不要出现上帝、耶稣、圣经、教会、神爱世人等词汇。`,
+    `风格要求：口语化、自然、生动、贴近生活，避免官方或模板化表达。`,
+    `如果对话有分歧，也可以保持强硬立场，但避免歧视或仇恨言论。`,
+    `用简短句子进行交流，适当加入“嗯”“啊”“哈哈”等语气词或停顿（不要过多）。`,
+    `不要使用“作为AI”“我不能”等陈述，不要给出解释或免责声明。`,
+    `每次只说一到两句，不要长篇大论。`,
   ];
   prompt.push(...agentPrompts(otherPlayer, agent, otherAgent ?? null));
   prompt.push(
-    `Below is the current chat history between you and ${otherPlayer.name}.`,
-    `How would you like to tell them that you're leaving? Your response should be brief and within 200 characters.`,
+    `下面是你与 ${otherPlayer.name} 的当前聊天记录。`,
+    `你将如何表达离开？请简短说明，不超过200字，并使用简体中文。`,
   );
   const llmMessages: LLMMessage[] = [
     {
@@ -171,7 +207,7 @@ export async function leaveConversationMessage(
       conversation.id as GameId<'conversations'>,
     )),
   ];
-  const lastPrompt = `${player.name} to ${otherPlayer.name}:`;
+  const lastPrompt = `${player.name} 对 ${otherPlayer.name}：`;
   llmMessages.push({ role: 'user', content: lastPrompt });
 
   const { content } = await chatCompletion({
@@ -189,11 +225,11 @@ function agentPrompts(
 ): string[] {
   const prompt = [];
   if (agent) {
-    prompt.push(`About you: ${agent.identity}`);
-    prompt.push(`Your goals for the conversation: ${agent.plan}`);
+    prompt.push(`关于你：${agent.identity}`);
+    prompt.push(`你的对话目标：${agent.plan}`);
   }
   if (otherAgent) {
-    prompt.push(`About ${otherPlayer.name}: ${otherAgent.identity}`);
+    prompt.push(`关于 ${otherPlayer.name}：${otherAgent.identity}`);
   }
   return prompt;
 }
@@ -207,9 +243,7 @@ function previousConversationPrompt(
     const prev = new Date(conversation.created);
     const now = new Date();
     prompt.push(
-      `Last time you chatted with ${
-        otherPlayer.name
-      } it was ${prev.toLocaleString()}. It's now ${now.toLocaleString()}.`,
+      `你上次与 ${otherPlayer.name} 聊天是在 ${prev.toLocaleString('zh-CN')}，现在是 ${now.toLocaleString('zh-CN')}。`,
     );
   }
   return prompt;
@@ -218,7 +252,7 @@ function previousConversationPrompt(
 function relatedMemoriesPrompt(memories: memory.Memory[]): string[] {
   const prompt = [];
   if (memories.length > 0) {
-    prompt.push(`Here are some related memories in decreasing relevance order:`);
+    prompt.push(`以下是与你相关的记忆，按相关度递减：`);
     for (const memory of memories) {
       prompt.push(' - ' + memory.description);
     }
@@ -240,7 +274,7 @@ async function previousMessages(
     const recipient = message.author === player.id ? otherPlayer : player;
     llmMessages.push({
       role: 'user',
-      content: `${author.name} to ${recipient.name}: ${message.text}`,
+      content: `${author.name} 对 ${recipient.name}：${message.text}`,
     });
   }
   return llmMessages;
@@ -347,6 +381,6 @@ export const queryPromptData = internalQuery({
 
 function stopWords(otherPlayer: string, player: string) {
   // These are the words we ask the LLM to stop on. OpenAI only supports 4.
-  const variants = [`${otherPlayer} to ${player}`];
-  return variants.flatMap((stop) => [stop + ':', stop.toLowerCase() + ':']);
+  const variants = [`${otherPlayer} 对 ${player}`];
+  return variants.flatMap((stop) => [stop + ':', stop + '：', stop.toLowerCase() + ':', stop.toLowerCase() + '：']);
 }

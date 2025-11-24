@@ -40,8 +40,7 @@
 
 body {
   color: rgb(var(--foreground-rgb));
-  background: linear-gradient(to bottom, transparent, rgb(var(--background-end-rgb)))
-    rgb(var(--background-start-rgb));
+  background: linear-gradient(135deg, #0a1a0a 0%, #0f2d1a 50%, #123524 100%);
 }
 
 .game-background {
@@ -128,6 +127,11 @@ body {
   border-image-slice: 40%;
 }
 
+.chat-panel-bg {
+  background: linear-gradient(180deg, #1f1d2b 0%, #141321 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
 .login-prompt {
   border-width: 48px;
   border-image-source: url(../assets/ui/jewel_box.svg);
@@ -155,8 +159,8 @@ body {
     font-size: 16px;
   }
 
-  .button > div,
-  .button > span {
+  .button>div,
+  .button>span {
     vertical-align: top;
     line-height: 1;
   }
@@ -182,4 +186,40 @@ p[contenteditable='true']:empty::before {
 
 .shape-top-left-corner {
   clip-path: polygon(0 0, 100% 0, 0 100%);
+}
+
+.bubble-content {
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 0.25rem 0.5rem;
+}
+
+.bubble-rose .bubble-content {
+  background: #fff0f2;
+  color: #2a1a1d;
+}
+
+.bubble-sky .bubble-content {
+  background: #eef7ff;
+  color: #102a43;
+}
+
+.bubble-lemon .bubble-content {
+  background: #fff9e6;
+  color: #3a2a00;
+}
+
+.bubble-mint .bubble-content {
+  background: #eafff5;
+  color: #0f2d25;
+}
+
+.bubble-lilac .bubble-content {
+  background: #f4efff;
+  color: #231a3a;
+}
+
+.bubble-clay .bubble-content {
+  background: #f5f1ec;
+  color: #2b2320;
 }

@@ -27,6 +27,7 @@ export const PixiGame = (props: {
   // PIXI setup.
   const pixiApp = useApp();
   const viewportRef = useRef<Viewport | undefined>();
+  const autoPanTimer = useRef<number | null>(null);
 
   const humanTokenIdentifier = useQuery(api.world.userStatus, { worldId: props.worldId }) ?? null;
   const humanPlayerId = [...props.game.world.players.values()].find(
@@ -93,6 +94,52 @@ export const PixiGame = (props: {
     });
   }, [humanPlayerId]);
 
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const worldPx = { w: props.game.worldMap.width * tileDim, h: props.game.worldMap.height * tileDim };
+    const screenPx = { w: props.width, h: props.height };
+    const margin = { x: screenPx.w / 2, y: screenPx.h / 2 };
+    const clamp = (val: number, min: number, max: number) => Math.max(min, Math.min(max, val));
+    const centers = () => {
+      const out: PIXI.Point[] = [];
+      for (const c of props.game.world.conversations.values()) {
+        const ids = [...c.participants.keys()];
+        if (ids.length !== 2) continue;
+        const p1 = props.game.world.players.get(ids[0]);
+        const p2 = props.game.world.players.get(ids[1]);
+        if (!p1 || !p2) continue;
+        const cx = ((p1.position.x + p2.position.x) / 2) * tileDim;
+        const cy = ((p1.position.y + p2.position.y) / 2) * tileDim;
+        const x = clamp(cx, margin.x, worldPx.w - margin.x);
+        const y = clamp(cy, margin.y, worldPx.h - margin.y);
+        out.push(new PIXI.Point(x, y));
+      }
+      return out;
+    };
+    let idx = 0;
+    const dwellMs = 8000;
+    const travelMs = 1500;
+    const tick = () => {
+      const list = centers();
+      if (!list.length) {
+        autoPanTimer.current = window.setTimeout(tick, dwellMs);
+        return;
+      }
+      const target = list[idx % list.length];
+      viewport.animate({ position: target, scale: 1.35, time: travelMs });
+      idx = (idx + 1) % Math.max(1, list.length);
+      autoPanTimer.current = window.setTimeout(tick, travelMs + dwellMs);
+    };
+    tick();
+    return () => {
+      if (autoPanTimer.current) {
+        window.clearTimeout(autoPanTimer.current);
+        autoPanTimer.current = null;
+      }
+    };
+  }, [viewportRef.current, props.game.world.conversations.size, props.game.worldMap.width, props.game.worldMap.height, tileDim, props.width, props.height]);
+
   return (
     <PixiViewport
       app={pixiApp}
@@ -123,6 +170,7 @@ export const PixiGame = (props: {
           isViewer={p.id === humanPlayerId}
           onClick={props.setSelectedElement}
           historicalTime={props.historicalTime}
+          worldId={props.worldId}
         />
       ))}
     </PixiViewport>

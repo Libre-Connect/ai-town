@@ -152,4 +152,36 @@ export const agentInputs = {
       return { agentId };
     },
   }),
+  createAgentDynamic: inputHandler({
+    args: {
+      name: v.string(),
+      character: v.string(),
+      identity: v.string(),
+      plan: v.string(),
+    },
+    handler: (game, now, args) => {
+      const playerId = Player.join(game, now, args.name, args.character, args.identity);
+      const agentId = game.allocId('agents');
+      game.world.agents.set(
+        agentId,
+        new Agent({
+          id: agentId,
+          playerId,
+          inProgressOperation: undefined,
+          lastConversation: undefined,
+          lastInviteAttempt: undefined,
+          toRemember: undefined,
+        }),
+      );
+      game.agentDescriptions.set(
+        agentId,
+        new AgentDescription({
+          agentId,
+          identity: args.identity,
+          plan: args.plan,
+        }),
+      );
+      return { agentId };
+    },
+  }),
 };

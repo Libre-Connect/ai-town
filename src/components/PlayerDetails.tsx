@@ -47,6 +47,7 @@ export default function PlayerDetails({
   );
 
   const playerDescription = playerId && game.playerDescriptions.get(playerId);
+  const inventory = player && (player as any).inventory;
 
   const startConversation = useSendInput(engineId, 'startConversation');
   const acceptInvite = useSendInput(engineId, 'acceptInvite');
@@ -56,7 +57,7 @@ export default function PlayerDetails({
   if (!playerId) {
     return (
       <div className="h-full text-xl flex text-center items-center p-4">
-        Click on an agent on the map to see chat history.
+        点击地图中的角色查看聊天记录。
       </div>
     );
   }
@@ -91,7 +92,7 @@ export default function PlayerDetails({
     if (!humanPlayer || !playerId) {
       return;
     }
-    console.log(`Starting conversation`);
+    console.log(`开始对话`);
     await toastOnError(startConversation({ playerId: humanPlayer.id, invitee: playerId }));
   };
   const onAcceptInvite = async () => {
@@ -157,21 +158,21 @@ export default function PlayerDetails({
           onClick={onStartConversation}
         >
           <div className="h-full bg-clay-700 text-center">
-            <span>Start conversation</span>
+            <span>开始对话</span>
           </div>
         </a>
       )}
       {waitingForAccept && (
         <a className="mt-6 button text-white shadow-solid text-xl cursor-pointer pointer-events-auto opacity-50">
           <div className="h-full bg-clay-700 text-center">
-            <span>Waiting for accept...</span>
+            <span>等待对方接受...</span>
           </div>
         </a>
       )}
       {waitingForNearby && (
         <a className="mt-6 button text-white shadow-solid text-xl cursor-pointer pointer-events-auto opacity-50">
           <div className="h-full bg-clay-700 text-center">
-            <span>Walking over...</span>
+            <span>对方正在靠近...</span>
           </div>
         </a>
       )}
@@ -184,7 +185,7 @@ export default function PlayerDetails({
           onClick={onLeaveConversation}
         >
           <div className="h-full bg-clay-700 text-center">
-            <span>Leave conversation</span>
+            <span>离开对话</span>
           </div>
         </a>
       )}
@@ -198,7 +199,7 @@ export default function PlayerDetails({
             onClick={onAcceptInvite}
           >
             <div className="h-full bg-clay-700 text-center">
-              <span>Accept</span>
+              <span>接受</span>
             </div>
           </a>
           <a
@@ -209,7 +210,7 @@ export default function PlayerDetails({
             onClick={onRejectInvite}
           >
             <div className="h-full bg-clay-700 text-center">
-              <span>Reject</span>
+              <span>拒绝</span>
             </div>
           </a>
         </>
@@ -224,15 +225,28 @@ export default function PlayerDetails({
       <div className="desc my-6">
         <p className="leading-tight -m-4 bg-brown-700 text-base sm:text-sm">
           {!isMe && playerDescription?.description}
-          {isMe && <i>This is you!</i>}
+          {isMe && <i>这是你！</i>}
           {!isMe && inConversationWithMe && (
             <>
               <br />
-              <br />(<i>Conversing with you!</i>)
+              <br />(<i>正在和你对话！</i>)
             </>
           )}
         </p>
       </div>
+      {inventory && inventory.length > 0 && (
+        <div className="box flex-grow">
+          <h2 className="bg-brown-700 text-lg text-center">物品</h2>
+          <div className="grid grid-cols-6 gap-2 p-2 bg-brown-200">
+            {inventory.map((item: any, idx: number) => (
+              <div key={`inv-${idx}`} className="flex flex-col items-center">
+                <img src={item.imageUrl} className="w-8 h-8" />
+                <span className="text-xs text-black mt-1 truncate max-w-[60px]">{item.name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {!isMe && playerConversation && playerStatus?.kind === 'participating' && (
         <Messages
           worldId={worldId}
@@ -246,7 +260,7 @@ export default function PlayerDetails({
       {!playerConversation && previousConversation && (
         <>
           <div className="box flex-grow">
-            <h2 className="bg-brown-700 text-lg text-center">Previous conversation</h2>
+            <h2 className="bg-brown-700 text-lg text-center">之前的对话</h2>
           </div>
           <Messages
             worldId={worldId}

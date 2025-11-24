@@ -353,7 +353,22 @@ export const loadWorld = internalQuery({
     generationNumber: v.number(),
   },
   handler: async (ctx, args) => {
-    return await Game.load(ctx.db, args.worldId, args.generationNumber);
+    try {
+      return await Game.load(ctx.db, args.worldId, args.generationNumber);
+    } catch (e: any) {
+      const msg = e?.message || '';
+      if (msg.includes('Generation number mismatch')) {
+        const worldStatus = await ctx.db
+          .query('worldStatus')
+          .withIndex('worldId', (q) => q.eq('worldId', args.worldId))
+          .unique();
+        if (!worldStatus) throw e;
+        const engine = await ctx.db.get(worldStatus.engineId);
+        if (!engine) throw e;
+        return await Game.load(ctx.db, args.worldId, engine.generationNumber);
+      }
+      throw e;
+    }
   },
 });
 

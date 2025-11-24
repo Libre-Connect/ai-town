@@ -248,9 +248,9 @@ async function calculateImportance(description: string) {
     messages: [
       {
         role: 'user',
-        content: `On the scale of 0 to 9, where 0 is purely mundane (e.g., brushing teeth, making bed) and 9 is extremely poignant (e.g., a break up, college acceptance), rate the likely poignancy of the following piece of memory.
-      Memory: ${description}
-      Answer on a scale of 0 to 9. Respond with number only, e.g. "5"`,
+        content: `请你用 0 到 9 的数字为下面的记忆评估重要性，0 表示非常日常，9 表示非常重要。
+      记忆：${description}
+      仅返回阿拉伯数字，例如 5。`,
       },
     ],
     temperature: 0.0,
@@ -259,10 +259,35 @@ async function calculateImportance(description: string) {
 
   let importance = parseFloat(importanceRaw);
   if (isNaN(importance)) {
-    importance = +(importanceRaw.match(/\d+/)?.[0] ?? NaN);
+    const digits = importanceRaw.match(/\d+/)?.[0];
+    if (digits !== undefined) {
+      importance = +digits;
+    }
   }
   if (isNaN(importance)) {
-    console.debug('Could not parse memory importance from: ', importanceRaw);
+    const t = importanceRaw.trim().replace(/^['"]|['"]$/g, '');
+    const zhMap: Record<string, number> = {
+      零: 0,
+      〇: 0,
+      一: 1,
+      二: 2,
+      两: 2,
+      三: 3,
+      四: 4,
+      五: 5,
+      六: 6,
+      七: 7,
+      八: 8,
+      九: 9,
+    };
+    for (const k in zhMap) {
+      if (t.includes(k)) {
+        importance = zhMap[k];
+        break;
+      }
+    }
+  }
+  if (isNaN(importance)) {
     importance = 5;
   }
   return importance;

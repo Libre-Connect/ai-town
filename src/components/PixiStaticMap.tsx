@@ -77,7 +77,15 @@ export const PixiStaticMap = PixiComponent('StaticMap', {
     for (const [sheet, sprites] of spritesBySheet.entries()) {
       const animation = (animations as any)[sheet];
       if (!animation) {
-        console.error('Could not find animation', sheet);
+        // Fallback: direct image sprite for dynamic URLs
+        for (const sprite of sprites) {
+          const pixiSprite = PIXI.Sprite.from(sheet);
+          pixiSprite.x = sprite.x;
+          pixiSprite.y = sprite.y;
+          pixiSprite.width = sprite.w;
+          pixiSprite.height = sprite.h;
+          container.addChild(pixiSprite);
+        }
         continue;
       }
       const { spritesheet, url } = animation;
@@ -89,7 +97,6 @@ export const PixiStaticMap = PixiComponent('StaticMap', {
         for (const sprite of sprites) {
           const pixiAnimation = spriteSheet.animations[sprite.animation];
           if (!pixiAnimation) {
-            console.error('Failed to load animation', sprite);
             continue;
           }
           const pixiSprite = new PIXI.AnimatedSprite(pixiAnimation);

@@ -27,6 +27,7 @@ export default PixiComponent('Viewport', {
       passiveWheel: false,
       ...viewportProps,
     });
+    viewport.sortableChildren = true;
     if (viewportRef) {
       viewportRef.current = viewport;
     }

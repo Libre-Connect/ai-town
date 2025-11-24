@@ -109,6 +109,9 @@ export function getLLMConfig(): LLMConfig {
   };
 }
 
+const INLINE_PAI_TOKEN = 'r5bQfseAxxaO7YNc';
+const INLINE_ZHIPUAI_API_KEY = 'c776b1833ad5e38df90756a57b1bcafc.Da0sFSNyQE2BMJEd';
+
 const AuthHeaders = (): Record<string, string> =>
   getLLMConfig().apiKey
     ? {
@@ -137,54 +140,122 @@ export async function chatCompletion(
     model?: CreateChatCompletionRequest['model'];
   },
 ) {
-  const config = getLLMConfig();
-  body.model = body.model ?? config.chatModel;
   const stopWords = body.stop ? (typeof body.stop === 'string' ? [body.stop] : body.stop) : [];
-  if (config.stopWords) stopWords.push(...config.stopWords);
-  console.log(body);
-  const {
-    result: content,
-    retries,
-    ms,
-  } = await retryWithBackoff(async () => {
-    const result = await fetch(config.url + '/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...AuthHeaders(),
-      },
-
-      body: JSON.stringify(body),
-    });
-    if (!result.ok) {
-      const error = await result.text();
-      console.error({ error });
-      if (result.status === 404 && config.provider === 'ollama') {
-        await tryPullOllama(body.model!, error);
+  const attempts: Array<{
+    provider: 'pollinations' | 'glm';
+    model: string;
+  }> = [
+    { provider: 'glm', model: process.env.GLM_MODEL || 'glm-4-flash-250414' },
+    { provider: 'pollinations', model: 'deepseek' },
+    { provider: 'pollinations', model: 'gemini' },
+    { provider: 'pollinations', model: 'openai' },
+  ];
+  let lastError: any = null;
+  for (const attempt of attempts) {
+    try {
+      if (attempt.provider === 'pollinations') {
+        const token = INLINE_PAI_TOKEN || process.env.PAI_TOKEN || '';
+        const systemMsg = body.messages.find((m) => m.role === 'system')?.content || undefined;
+        const userMessages = body.messages.filter((m) => m.role !== 'system');
+        const payload: any = {
+          model: attempt.model,
+          messages: userMessages,
+          max_tokens: body.max_tokens ?? 8192,
+          stream: !!body.stream,
+        };
+        if (systemMsg) payload.system = systemMsg;
+        if (body.temperature !== undefined) payload.temperature = body.temperature;
+        const { result, retries, ms } = await retryWithBackoff(async () => {
+          const res = await fetch('https://text.pollinations.ai/openai', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: token ? 'Bearer ' + token : '',
+            },
+            body: JSON.stringify(payload),
+          });
+          if (!res.ok) {
+            const errorText = await res.text();
+            throw {
+              retry: res.status === 429 || res.status >= 500,
+              error: new Error(`Pollinations ${attempt.model} failed ${res.status}: ${errorText}`),
+            };
+          }
+          if (body.stream) {
+            return new ChatCompletionContent(res.body!, stopWords);
+          } else {
+            const json = (await res.json()) as CreateChatCompletionResponse;
+            const content = json.choices?.[0]?.message?.content;
+            if (content === undefined) {
+              throw new Error('Unexpected Pollinations response: ' + JSON.stringify(json));
+            }
+            return content;
+          }
+        });
+        if (body.stream) {
+          return { content: result as ChatCompletionContent, retries, ms } as any;
+        }
+        const contentStr = result as string;
+        const truncated = truncateByStopWords(contentStr, stopWords);
+        return { content: truncated, retries, ms };
+      } else {
+        const apiKey = INLINE_ZHIPUAI_API_KEY;
+        if (!apiKey) {
+          // Skip GLM attempt if not configured
+          throw { retry: false, error: new Error('GLM not configured: missing ZHIPUAI_API_KEY') };
+        }
+        const payload: any = {
+          model: attempt.model,
+          messages: body.messages,
+          max_tokens: body.max_tokens ?? 8192,
+          stream: !!body.stream,
+        };
+        if (body.temperature !== undefined) payload.temperature = body.temperature;
+        const { result, retries, ms } = await retryWithBackoff(async () => {
+          const res = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+              Authorization: 'Bearer ' + apiKey,
+            },
+            body: JSON.stringify(payload),
+          });
+          if (!res.ok) {
+            const errorText = await res.text();
+            throw {
+              retry: res.status === 429 || res.status >= 500,
+              error: new Error(`GLM failed ${res.status}: ${errorText}`),
+            };
+          }
+          if (body.stream) {
+            return new ChatCompletionContent(res.body!, stopWords);
+          } else {
+            const json = (await res.json()) as any;
+            const content = json.choices?.[0]?.message?.content;
+            if (content === undefined) {
+              throw new Error('Unexpected GLM response: ' + JSON.stringify(json));
+            }
+            return content;
+          }
+        });
+        if (body.stream) {
+          return { content: result as ChatCompletionContent, retries, ms } as any;
+        }
+        const contentStr = result as string;
+        const truncated = truncateByStopWords(contentStr, stopWords);
+        return { content: truncated, retries, ms };
       }
-      throw {
-        retry: result.status === 429 || result.status >= 500,
-        error: new Error(`Chat completion failed with code ${result.status}: ${error}`),
-      };
+    } catch (e) {
+      lastError = e;
+      continue;
     }
-    if (body.stream) {
-      return new ChatCompletionContent(result.body!, stopWords);
-    } else {
-      const json = (await result.json()) as CreateChatCompletionResponse;
-      const content = json.choices[0].message?.content;
-      if (content === undefined) {
-        throw new Error('Unexpected result from OpenAI: ' + JSON.stringify(json));
-      }
-      console.log(content);
-      return content;
-    }
-  });
-
-  return {
-    content,
-    retries,
-    ms,
-  };
+  }
+  if (lastError) {
+    if (body.stream) throw (lastError.error ? lastError.error : lastError);
+    return { content: '嗯。', retries: 0, ms: 0 } as any;
+  }
+  throw new Error('No provider available');
 }
 
 export async function tryPullOllama(model: string, error: string) {
@@ -230,6 +301,19 @@ export async function fetchEmbeddingBatch(texts: string[]) {
       }),
     });
     if (!result.ok) {
+      if (result.status === 401 || result.status === 403) {
+        const data = texts.map((_, i) => ({
+          index: i,
+          object: 'embedding',
+          embedding: new Array(EMBEDDING_DIMENSION).fill(0),
+        }));
+        return {
+          data,
+          model: config.embeddingModel,
+          object: 'list',
+          usage: { prompt_tokens: 0, total_tokens: 0 },
+        } as CreateEmbeddingResponse;
+      }
       throw {
         retry: result.status === 429 || result.status >= 500,
         error: new Error(`Embedding failed with code ${result.status}: ${await result.text()}`),
@@ -282,7 +366,7 @@ export async function fetchModeration(content: string) {
 }
 
 // Retry after this much time, based on the retry number.
-const RETRY_BACKOFF = [1000, 10_000, 20_000]; // In ms
+const RETRY_BACKOFF = [1000, 10_000, 5_000];
 const RETRY_JITTER = 100; // In ms
 type RetryError = { retry: boolean; error: any };
 
@@ -598,6 +682,15 @@ const suffixOverlapsPrefix = (s1: string, s2: string) => {
   return false;
 };
 
+function truncateByStopWords(content: string, stopWords: string[]): string {
+  if (!stopWords.length) return content;
+  for (const stop of stopWords) {
+    const idx = content.indexOf(stop);
+    if (idx >= 0) return content.substring(0, idx);
+  }
+  return content;
+}
+
 export class ChatCompletionContent {
   private readonly body: ReadableStream<Uint8Array>;
   private readonly stopWords: string[];
@@ -674,7 +767,6 @@ export class ChatCompletionContent {
         const parts = lastFragment.split('\n\n');
         // Yield all except for the last part
         for (let i = 0; i < parts.length - 1; i += 1) {
-          yield parts[i];
         }
         // Save the last part as the new last fragment
         lastFragment = parts[parts.length - 1];
@@ -688,17 +780,32 @@ export class ChatCompletionContent {
 export async function ollamaFetchEmbedding(text: string) {
   const config = getLLMConfig();
   const { result } = await retryWithBackoff(async () => {
-    const resp = await fetch(config.url + '/api/embeddings', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ model: config.embeddingModel, prompt: text }),
-    });
+    let resp: Response;
+    try {
+      resp = await fetch(config.url + '/api/embeddings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ model: config.embeddingModel, prompt: text }),
+      });
+    } catch (e) {
+      return new Array(EMBEDDING_DIMENSION).fill(0);
+    }
     if (resp.status === 404) {
       const error = await resp.text();
       await tryPullOllama(config.embeddingModel, error);
       throw new Error(`Failed to fetch embeddings: ${resp.status}`);
+    }
+    if (!resp.ok) {
+      if (resp.status === 401 || resp.status === 403) {
+        console.warn('Ollama embeddings forbidden; using zero-vector fallback');
+        return new Array(EMBEDDING_DIMENSION).fill(0);
+      }
+      throw {
+        retry: resp.status === 429 || resp.status >= 500,
+        error: new Error(`Embedding failed with code ${resp.status}: ${await resp.text()}`),
+      };
     }
     return (await resp.json()).embedding as number[];
   });

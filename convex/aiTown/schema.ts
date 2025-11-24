@@ -22,6 +22,9 @@ export const aiTownTables = {
     engineId: v.id('engines'),
     lastViewed: v.number(),
     status: v.union(v.literal('running'), v.literal('stoppedByDeveloper'), v.literal('inactive')),
+    lastGenerationBucket: v.optional(v.number()),
+    generationWindowStart: v.optional(v.number()),
+    generationWindowCount: v.optional(v.number()),
   }).index('worldId', ['worldId']),
 
   // This table contains the map data for a given world. Since it's a bit larger than the player

@@ -30,6 +30,27 @@ export function Messages({
     worldId,
     conversationId: conversation.doc.id,
   });
+  const splitSegments = (text: string, fallbackName: string) => {
+    const s = text || '';
+    const matches = Array.from(s.matchAll(/(?:^|[\s\n\r])([\u4e00-\u9fa5A-Za-z0-9_]{1,20})[：:]/g));
+    if (matches.length <= 1) return [{ name: fallbackName, content: s.trim() }];
+    const segs: { name: string; content: string }[] = [];
+    for (let i = 0; i < matches.length; i++) {
+      const m = matches[i];
+      const name = m[1];
+      const start = m.index! + m[0].length - (m[0].startsWith(' ') || m[0].startsWith('\n') || m[0].startsWith('\r') ? 0 : 0);
+      const end = i + 1 < matches.length ? matches[i + 1].index! : s.length;
+      const content = s.substring(start, end).trim();
+      if (content) segs.push({ name, content });
+    }
+    return segs.length ? segs : [{ name: fallbackName, content: s.trim() }];
+  };
+  const bubbleVariant = (id: string) => {
+    const palette = ['bubble-rose', 'bubble-sky', 'bubble-lemon', 'bubble-mint', 'bubble-lilac', 'bubble-clay'];
+    let sum = 0;
+    for (let i = 0; i < id.length; i++) sum += id.charCodeAt(i);
+    return palette[sum % palette.length];
+  };
   let currentlyTyping = conversation.kind === 'active' ? conversation.doc.isTyping : undefined;
   if (messages !== undefined && currentlyTyping) {
     if (messages.find((m) => m.messageUuid === currentlyTyping!.messageUuid)) {
@@ -68,21 +89,24 @@ export function Messages({
   if (messages.length === 0 && !inConversationWithMe) {
     return null;
   }
-  const messageNodes: { time: number; node: React.ReactNode }[] = messages.map((m) => {
-    const node = (
-      <div key={`text-${m._id}`} className="leading-tight mb-6">
-        <div className="flex gap-4">
-          <span className="uppercase flex-grow">{m.authorName}</span>
-          <time dateTime={m._creationTime.toString()}>
-            {new Date(m._creationTime).toLocaleString()}
-          </time>
+  const messageNodes: { time: number; node: React.ReactNode }[] = messages.flatMap((m) => {
+    const segs = splitSegments(m.text, m.authorName);
+    return segs.map((seg, i) => {
+      const node = (
+        <div key={`text-${m._id}-${i}`} className="leading-tight mb-6">
+          <div className="flex gap-4">
+            <span className="uppercase flex-grow">{seg.name}</span>
+            <time dateTime={m._creationTime.toString()}>
+              {new Date(m._creationTime).toLocaleString('zh-CN')}
+            </time>
+          </div>
+          <div className={clsx('bubble', m.author === humanPlayerId && 'bubble-mine', bubbleVariant(seg.name))}>
+            <p className="bubble-content -mx-3 -my-1">{seg.content}</p>
+          </div>
         </div>
-        <div className={clsx('bubble', m.author === humanPlayerId && 'bubble-mine')}>
-          <p className="bg-white -mx-3 -my-1">{m.text}</p>
-        </div>
-      </div>
-    );
-    return { node, time: m._creationTime };
+      );
+      return { node, time: m._creationTime };
+    });
   });
   const lastMessageTs = messages.map((m) => m._creationTime).reduce((a, b) => Math.max(a, b), 0);
 
@@ -99,7 +123,7 @@ export function Messages({
         membershipNodes.push({
           node: (
             <div key={`joined-${playerId}`} className="leading-tight mb-6">
-              <p className="text-brown-700 text-center">{playerName} joined the conversation.</p>
+              <p className="text-brown-700 text-center">{playerName} 加入了对话。</p>
             </div>
           ),
           time: started,
@@ -114,7 +138,7 @@ export function Messages({
       membershipNodes.push({
         node: (
           <div key={`joined-${playerId}`} className="leading-tight mb-6">
-            <p className="text-brown-700 text-center">{playerName} joined the conversation.</p>
+              <p className="text-brown-700 text-center">{playerName} 加入了对话。</p>
           </div>
         ),
         time: started,
@@ -123,7 +147,7 @@ export function Messages({
       membershipNodes.push({
         node: (
           <div key={`left-${playerId}`} className="leading-tight mb-6">
-            <p className="text-brown-700 text-center">{playerName} left the conversation.</p>
+              <p className="text-brown-700 text-center">{playerName} 离开了对话。</p>
           </div>
         ),
         // Always sort all "left" messages after the last message.
@@ -143,12 +167,12 @@ export function Messages({
             <div className="flex gap-4">
               <span className="uppercase flex-grow">{currentlyTypingName}</span>
               <time dateTime={currentlyTyping.since.toString()}>
-                {new Date(currentlyTyping.since).toLocaleString()}
+                {new Date(currentlyTyping.since).toLocaleString('zh-CN')}
               </time>
             </div>
-            <div className={clsx('bubble')}>
-              <p className="bg-white -mx-3 -my-1">
-                <i>typing...</i>
+            <div className={clsx('bubble', bubbleVariant(currentlyTyping.playerId))}>
+              <p className="bubble-content -mx-3 -my-1">
+                <i>正在输入...</i>
               </p>
             </div>
           </div>

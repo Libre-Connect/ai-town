@@ -28,6 +28,33 @@ export const listMessages = query({
   },
 });
 
+export const listRecentByWorld = query({
+  args: {
+    worldId: v.id('worlds'),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const num = args.limit ?? 200;
+    const messages = await ctx.db
+      .query('messages')
+      .withIndex('worldIdOnly', (q) => q.eq('worldId', args.worldId))
+      .order('desc')
+      .take(num);
+    const out = [] as Array<any>;
+    for (const message of messages) {
+      const playerDescription = await ctx.db
+        .query('playerDescriptions')
+        .withIndex('worldId', (q) => q.eq('worldId', args.worldId).eq('playerId', message.author))
+        .first();
+      if (!playerDescription) {
+        continue;
+      }
+      out.push({ ...message, authorName: playerDescription.name });
+    }
+    return out;
+  },
+});
+
 export const writeMessage = mutation({
   args: {
     worldId: v.id('worlds'),
