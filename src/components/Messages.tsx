@@ -101,7 +101,21 @@ export function Messages({
             </time>
           </div>
           <div className={clsx('bubble', m.author === humanPlayerId && 'bubble-mine', bubbleVariant(seg.name))}>
-            <p className="bubble-content -mx-3 -my-1 leading-relaxed">{seg.content}</p>
+            <div className="bubble-content -mx-3 -my-1 leading-relaxed space-y-2">
+              {seg.content && <p className="leading-relaxed">{seg.content}</p>}
+              {m.imageUrl && i === 0 && (
+                <div className="mt-1">
+                  <img
+                    src={m.imageUrl}
+                    alt={m.imagePrompt || '生成的图片'}
+                    className="max-w-full rounded border border-gray-200"
+                  />
+                  {m.imagePrompt && (
+                    <p className="text-xs text-gray-700 mt-1 break-words">{m.imagePrompt}</p>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       );

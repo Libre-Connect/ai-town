@@ -4,14 +4,10 @@ import { characters } from '../../data/characters.ts';
 import { toast } from 'react-toastify';
 import { Player as ServerPlayer } from '../../convex/aiTown/player.ts';
 import { GameId } from '../../convex/aiTown/ids.ts';
-import { Id } from '../../convex/_generated/dataModel';
-import { useQuery } from 'convex/react';
-import { api } from '../../convex/_generated/api';
 import { Location, locationFields, playerLocation } from '../../convex/aiTown/location.ts';
 import { useHistoricalValue } from '../hooks/useHistoricalValue.ts';
-import { PlayerDescription } from '../../convex/aiTown/playerDescription.ts';
-import { WorldMap } from '../../convex/aiTown/worldMap.ts';
 import { ServerGame } from '../hooks/serverGame.ts';
+import { Doc } from '../../convex/_generated/dataModel';
 
 export type SelectElement = (element?: { kind: 'player'; id: GameId<'players'> }) => void;
 
@@ -23,7 +19,7 @@ export const Player = ({
   player,
   onClick,
   historicalTime,
-  worldId,
+  recentMessagesByPlayer,
 }: {
   game: ServerGame;
   isViewer: boolean;
@@ -31,7 +27,10 @@ export const Player = ({
 
   onClick: SelectElement;
   historicalTime?: number;
-  worldId: Id<'worlds'>;
+  recentMessagesByPlayer?: Map<
+    GameId<'players'>,
+    Doc<'messages'> & { authorName?: string; imagePrompt?: string; imageUrl?: string }
+  >;
 }) => {
   const playerCharacter = game.playerDescriptions.get(player.id)?.character;
   const playerName = game.playerDescriptions.get(player.id)?.name;
@@ -71,7 +70,6 @@ export const Player = ({
     !![...game.world.agents.values()].find(
       (a) => a.playerId === player.id && !!a.inProgressOperation,
     );
-  const playerConversation = game.world.playerConversation(player);
   let speechText: string | undefined;
   let speechColor = 0x333333;
   {
@@ -80,18 +78,13 @@ export const Player = ({
     for (let i = 0; i < player.id.length; i++) sum += player.id.charCodeAt(i);
     speechColor = palette[sum % palette.length];
   }
-  // Fetch latest messages for this player's conversation.
-  const messages = useQuery(
-    api.messages.listMessages,
-    playerConversation ? { worldId, conversationId: playerConversation.id } : 'skip',
-  );
-  if (messages && messages.length > 0) {
-    const ordered = messages.slice().sort((a: any, b: any) => a._creationTime - b._creationTime);
-    const last = ordered[ordered.length - 1];
-    if (last.author === player.id) {
-      const now = Date.now();
-      if (now - last._creationTime < 12000) {
-        const t = last.text.trim();
+  // Fetch the latest message authored by this player from the shared recent message map.
+  const lastMessage = recentMessagesByPlayer?.get(player.id);
+  if (lastMessage) {
+    const now = Date.now();
+    if (now - lastMessage._creationTime < 12000) {
+      const t = (lastMessage.imagePrompt || lastMessage.text || '').trim();
+      if (t) {
         speechText = t;
       }
     }

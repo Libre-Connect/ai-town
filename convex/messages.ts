@@ -62,6 +62,8 @@ export const writeMessage = mutation({
     messageUuid: v.string(),
     playerId,
     text: v.string(),
+    imagePrompt: v.optional(v.string()),
+    imageUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await ctx.db.insert('messages', {
@@ -69,6 +71,8 @@ export const writeMessage = mutation({
       author: args.playerId,
       messageUuid: args.messageUuid,
       text: args.text,
+      imagePrompt: args.imagePrompt,
+      imageUrl: args.imageUrl,
       worldId: args.worldId,
     });
     await insertInput(ctx, args.worldId, 'finishSendingMessage', {

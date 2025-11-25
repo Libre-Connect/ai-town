@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import PixiGame from './PixiGame.tsx';
 
 import { useElementSize } from 'usehooks-ts';
@@ -42,7 +42,8 @@ export default function Game() {
 
   const scrollViewRef = useRef<HTMLDivElement>(null);
 
-  if (game) {
+  useEffect(() => {
+    if (!game) return;
     const currentIds = new Set<string>([...game.agentDescriptions.keys()].map((id) => String(id)));
     const last = lastAgentIdsRef.current;
     for (const id of currentIds) {
@@ -81,7 +82,7 @@ export default function Game() {
         setBanner(null);
       }, 4000);
     }
-  }
+  }, [game, banner]);
 
   if (!worldId || !engineId || !game) {
     return null;

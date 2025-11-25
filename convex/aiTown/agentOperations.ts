@@ -48,6 +48,7 @@ const CHARACTER_ASSETS = [
 const DISCOVERY_GENERATION_PROBABILITY = 0.005;
 const POLLINATIONS_MODEL = 'flux';
 const POLLINATIONS_TOKEN = 'r5bQfseAxxaO7YNc';
+const IMAGE_MESSAGE_PROBABILITY = 0.12;
 
 function pollinationsImageUrl(prompt: string, seed = Date.now()) {
   const params = new URLSearchParams({
@@ -132,12 +133,45 @@ export const agentGenerateMessage = internalAction({
       text = text.replace(bannedSevere, '……');
     }
 
+    let imagePrompt: string | undefined;
+    let imageUrl: string | undefined;
+    const shouldGenerateImage =
+      args.type !== 'leave' && text.length > 8 && Math.random() < IMAGE_MESSAGE_PROBABILITY;
+    if (shouldGenerateImage) {
+      try {
+        const { content } = await chatCompletion({
+          messages: [
+            {
+              role: 'system',
+              content:
+                'You turn a chat message into a concise, vivid pixel art sticker prompt in English. Output only the prompt, under 80 characters.',
+            },
+            { role: 'user', content: text },
+          ],
+          temperature: 0.6,
+          max_tokens: 80,
+        });
+        const englishPrompt = String(content || '')
+          .trim()
+          .replace(/^["'\s]+|["'\s]+$/g, '')
+          .slice(0, 160);
+        if (englishPrompt) {
+          imagePrompt = englishPrompt;
+          imageUrl = pollinationsImageUrl(englishPrompt);
+        }
+      } catch (e) {
+        console.warn('generate image prompt failed', e);
+      }
+    }
+
     await ctx.runMutation(internal.aiTown.agent.agentSendMessage, {
       worldId: args.worldId,
       conversationId: args.conversationId,
       agentId: args.agentId,
       playerId: args.playerId,
       text,
+      imagePrompt,
+      imageUrl,
       messageUuid: args.messageUuid,
       leaveConversation: args.type === 'leave',
       operationId: args.operationId,

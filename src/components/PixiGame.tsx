@@ -1,11 +1,11 @@
 import * as PIXI from 'pixi.js';
 import { useApp } from '@pixi/react';
 import { Player, SelectElement } from './Player.tsx';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { PixiStaticMap } from './PixiStaticMap.tsx';
 import PixiViewport from './PixiViewport.tsx';
 import { Viewport } from 'pixi-viewport';
-import { Id } from '../../convex/_generated/dataModel';
+import { Doc, Id } from '../../convex/_generated/dataModel';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api.js';
 import { useSendInput } from '../hooks/sendInput.ts';
@@ -14,6 +14,7 @@ import { DebugPath } from './DebugPath.tsx';
 import { PositionIndicator } from './PositionIndicator.tsx';
 import { SHOW_DEBUG_UI } from './Game.tsx';
 import { ServerGame } from '../hooks/serverGame.ts';
+import { GameId } from '../../convex/aiTown/ids.ts';
 
 export const PixiGame = (props: {
   worldId: Id<'worlds'>;
@@ -33,6 +34,25 @@ export const PixiGame = (props: {
   const humanPlayerId = [...props.game.world.players.values()].find(
     (p) => p.human === humanTokenIdentifier,
   )?.id;
+  const recentMessages = useQuery(api.messages.listRecentByWorld, {
+    worldId: props.worldId,
+    limit: 500,
+  });
+  const recentMessagesByPlayer = useMemo(() => {
+    const map = new Map<
+      GameId<'players'>,
+      Doc<'messages'> & { authorName?: string; imagePrompt?: string; imageUrl?: string }
+    >();
+    if (!recentMessages) return map;
+    for (const msg of recentMessages) {
+      const authorId = msg.author as GameId<'players'>;
+      const existing = map.get(authorId);
+      if (!existing || existing._creationTime < msg._creationTime) {
+        map.set(authorId, msg);
+      }
+    }
+    return map;
+  }, [recentMessages]);
 
   const moveTo = useSendInput(props.engineId, 'moveTo');
 
@@ -170,7 +190,7 @@ export const PixiGame = (props: {
           isViewer={p.id === humanPlayerId}
           onClick={props.setSelectedElement}
           historicalTime={props.historicalTime}
-          worldId={props.worldId}
+          recentMessagesByPlayer={recentMessagesByPlayer}
         />
       ))}
     </PixiViewport>
