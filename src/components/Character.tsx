@@ -150,23 +150,25 @@ export const Character = ({
       )}
       {speechText && (
         (() => {
-          const paddingX = 8;
-          const paddingY = 6;
-          const fontSize = 12;
-          const w = 180;
+          const paddingX = 12;
+          const paddingY = 10;
+          const fontSize = 16;
+          const w = 240;
           const style = new PIXI.TextStyle({
             fill: 0x000000,
             fontSize,
+            fontWeight: '600',
             stroke: 0xffffff,
             strokeThickness: 0,
             wordWrap: true,
             wordWrapWidth: w - paddingX * 2,
             breakWords: true,
+            lineHeight: fontSize + 4,
           });
           const metrics = PIXI.TextMetrics.measureText(speechText, style);
           const h = Math.max(fontSize + paddingY * 2, metrics.height + paddingY * 2);
           return (
-            <Container x={0} y={-36} zIndex={20}>
+            <Container x={0} y={-48} zIndex={20}>
               <Graphics
                 draw={(g) => {
                   g.clear();

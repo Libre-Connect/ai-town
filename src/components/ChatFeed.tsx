@@ -46,21 +46,21 @@ export default function ChatFeed({ worldId, scrollViewRef }: { worldId: Id<'worl
     .flatMap((m: any) => {
       const segs = splitSegments(m.text, m.authorName);
       return segs.map((seg: any, i: number) => (
-        <div key={`feed-${m._id}-${i}`} className="leading-tight mb-3">
-          <div className="flex gap-2">
-            <span className="uppercase flex-grow text-white">{seg.name}</span>
-            <time dateTime={m._creationTime.toString()} className="text-xs text-gray-500">
+        <div key={`feed-${m._id}-${i}`} className="leading-snug mb-4">
+          <div className="flex items-center gap-3">
+            <span className="uppercase flex-grow text-white font-semibold tracking-wide">{seg.name}</span>
+            <time dateTime={m._creationTime.toString()} className="text-sm sm:text-xs text-gray-400">
               {new Date(m._creationTime).toLocaleTimeString('zh-CN', { hour12: false })}
             </time>
           </div>
           <div className={clsx('bubble', bubbleVariant(seg.name))}>
-            <p className="bubble-content -mx-3 -my-1">{seg.content}</p>
+            <p className="bubble-content -mx-3 -my-1 leading-relaxed">{seg.content}</p>
           </div>
         </div>
       ));
     });
   return (
-    <div className="text-base sm:text-sm">
+    <div className="text-xl sm:text-lg leading-relaxed">
       {nodes}
     </div>
   );

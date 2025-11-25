@@ -33,7 +33,13 @@ export async function rememberConversation(
     playerId,
     conversationId,
   });
-  const { player, otherPlayer } = data;
+  if (!data) {
+    console.warn(
+      `Skipping remembering conversation ${conversationId} for player ${playerId}: conversation metadata missing`,
+    );
+    return;
+  }
+  const { player, otherPlayer, conversation } = data;
   const messages = await ctx.runQuery(selfInternal.loadMessages, { worldId, conversationId });
   if (!messages.length) {
     return;
@@ -62,8 +68,13 @@ export async function rememberConversation(
     messages: llmMessages,
     max_tokens: 500,
   });
+  const conversationStartedAt =
+    (conversation as any).created ??
+    (conversation as any)._creationTime ??
+    messages[0]?._creationTime ??
+    Date.now();
   const description = `Conversation with ${otherPlayer.name} at ${new Date(
-    data.conversation._creationTime,
+    conversationStartedAt,
   ).toLocaleString()}: ${content}`;
   const importance = await calculateImportance(description);
   const { embedding } = await fetchEmbedding(description);
@@ -107,45 +118,97 @@ export const loadConversation = internalQuery({
     if (!playerDescription) {
       throw new Error(`Player description for ${args.playerId} not found`);
     }
-    const conversation = await ctx.db
+
+    const archivedConversation = await ctx.db
       .query('archivedConversations')
       .withIndex('worldId', (q) => q.eq('worldId', args.worldId).eq('id', args.conversationId))
       .first();
-    if (!conversation) {
-      throw new Error(`Conversation ${args.conversationId} not found`);
+
+    let conversation: Doc<'archivedConversations'> | any | null = archivedConversation ?? null;
+    let otherPlayerId: GameId<'players'> | null =
+      (archivedConversation?.participants.find((p) => p !== args.playerId) as GameId<'players'> | null) ?? null;
+
+    if (!otherPlayerId) {
+      const otherParticipator = await ctx.db
+        .query('participatedTogether')
+        .withIndex('conversation', (q) =>
+          q
+            .eq('worldId', args.worldId)
+            .eq('player1', args.playerId)
+            .eq('conversationId', args.conversationId),
+        )
+        .first();
+      if (otherParticipator) {
+        otherPlayerId = otherParticipator.player2 as GameId<'players'>;
+      }
     }
-    const otherParticipator = await ctx.db
-      .query('participatedTogether')
-      .withIndex('conversation', (q) =>
-        q
-          .eq('worldId', args.worldId)
-          .eq('player1', args.playerId)
-          .eq('conversationId', args.conversationId),
-      )
-      .first();
-    if (!otherParticipator) {
-      throw new Error(
-        `Couldn't find other participant in conversation ${args.conversationId} with player ${args.playerId}`,
+
+    if (!conversation || !otherPlayerId) {
+      const activeConversation = world.conversations.find((c) => c.id === args.conversationId);
+      if (activeConversation) {
+        conversation ??= {
+          ...activeConversation,
+          _creationTime: activeConversation.created,
+        };
+        otherPlayerId ??=
+          (activeConversation.participants.find((p) => p.playerId !== args.playerId)?.playerId as GameId<'players'> | undefined) ??
+          null;
+      }
+    }
+
+    if (!conversation || !otherPlayerId) {
+      const sampledMessages = await ctx.db
+        .query('messages')
+        .withIndex('conversationId', (q) =>
+          q.eq('worldId', args.worldId).eq('conversationId', args.conversationId),
+        )
+        .order('asc')
+        .take(50);
+      const firstMessage = sampledMessages[0];
+      if (!conversation && firstMessage) {
+        conversation = {
+          id: args.conversationId,
+          created: firstMessage._creationTime,
+          _creationTime: firstMessage._creationTime,
+        } as any;
+      }
+      if (!otherPlayerId) {
+        const otherAuthor = sampledMessages.find((m) => m.author !== args.playerId);
+        if (otherAuthor) {
+          otherPlayerId = otherAuthor.author as GameId<'players'>;
+        }
+      }
+    }
+
+    if (!conversation || !otherPlayerId) {
+      console.warn(
+        `Conversation ${args.conversationId} not found for player ${args.playerId}; skipping`,
       );
+      return null;
     }
-    const otherPlayerId = otherParticipator.player2;
+    const confirmedOtherPlayerId = otherPlayerId as GameId<'players'>;
+
     let otherPlayer: SerializedPlayer | Doc<'archivedPlayers'> | null =
-      world.players.find((p) => p.id === otherPlayerId) ?? null;
+      world.players.find((p) => p.id === confirmedOtherPlayerId) ?? null;
     if (!otherPlayer) {
       otherPlayer = await ctx.db
         .query('archivedPlayers')
-        .withIndex('worldId', (q) => q.eq('worldId', world._id).eq('id', otherPlayerId))
+        .withIndex('worldId', (q) => q.eq('worldId', world._id).eq('id', confirmedOtherPlayerId))
         .first();
     }
     if (!otherPlayer) {
-      throw new Error(`Conversation ${args.conversationId} other player not found`);
+      console.warn(
+        `Conversation ${args.conversationId} other player ${confirmedOtherPlayerId} not found`,
+      );
+      return null;
     }
     const otherPlayerDescription = await ctx.db
       .query('playerDescriptions')
-      .withIndex('worldId', (q) => q.eq('worldId', args.worldId).eq('playerId', otherPlayerId))
+      .withIndex('worldId', (q) => q.eq('worldId', args.worldId).eq('playerId', confirmedOtherPlayerId))
       .first();
     if (!otherPlayerDescription) {
-      throw new Error(`Player description for ${otherPlayerId} not found`);
+      console.warn(`Player description for ${confirmedOtherPlayerId} not found`);
+      return null;
     }
     return {
       player: { ...player, name: playerDescription.name },

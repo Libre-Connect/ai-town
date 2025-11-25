@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-采集 B 站直播间观众/弹幕用户名，调用 Convex mutation presenceSyncMutation 批量同步进出。
+采集 B 站直播间观众/弹幕用户名，调用 Convex HTTP 接口 /http/presence_import 批量导入（随机形象与计划）。
 """
 import asyncio
 import contextlib
@@ -17,7 +17,7 @@ import blivedm.models.web as web_models
 from blivedm import handlers, models
 
 # 在这里填入登录账号的 SESSDATA，避免用户名打码
-SESSDATA = os.environ.get('BILI_SESSDATA', '')
+SESSDATA = os.environ.get('BILI_SESSDATA', 'bdf921d3%2C1779595279%2C6c90c%2Ab1CjAhEq3EYm0bP80Fc3vyx6CsYzJACkV2bDS2vwT2nKkpOzJzAenp2yqvvztV4HAxax4SVnMtanA3cEJDcnNTUDZOYkk4cm43d0VXWVVMZHh1WmoxZmJmZXNIZ0Z6OURvMldPSlFvUlhqZURCcTYyX1doQmNsdDk0VGkwQno5NG02QzFFaTZ4M1p3IIEC')
 
 def _parse_room_id(raw: str) -> int:
   try:
@@ -26,14 +26,20 @@ def _parse_room_id(raw: str) -> int:
     return 0
 
 
-ROOM_ID_ENV = os.environ.get('ROOM_ID', '0')
+ROOM_ID_ENV = os.environ.get('ROOM_ID', '1730460074')
 ROOM_ID = _parse_room_id(sys.argv[1]) if len(sys.argv) > 1 else _parse_room_id(ROOM_ID_ENV)
 
-# Convex mutation 端点（默认指向 judicious-scorpion-568，可用环境变量覆盖）
-AI_TOWN_SERVER = os.environ.get('AI_TOWN_SERVER', 'https://judicious-scorpion-568.convex.cloud')
-AI_TOWN_MUTATION = os.environ.get(
-  'AI_TOWN_MUTATION', '/api/mutation/aiTown/agentOperations:presenceSyncMutation'
-)
+# Convex 导入端点（可用环境变量覆盖，默认指向 /http/presence_import）
+AI_TOWN_SERVER = os.environ.get('AI_TOWN_SERVER', 'https://superb-chinchilla-680.convex.cloud')
+AI_TOWN_MUTATION = os.environ.get('AI_TOWN_MUTATION', '/http/presence_import')
+if 'presenceSyncMutation' in AI_TOWN_MUTATION:
+  # 兼容旧配置：自动切到新接口
+  AI_TOWN_MUTATION = '/http/presence_import'
+# 兼容旧默认（无 /http 前缀）写法
+if AI_TOWN_MUTATION == '/presence_import':
+  AI_TOWN_MUTATION = '/http/presence_import'
+# worldId 可通过环境变量 AI_TOWN_WORLD_ID 传入；如果你有固定 worldId，可写成默认值
+AI_TOWN_WORLD_ID = os.environ.get('AI_TOWN_WORLD_ID', 'm17et29rc7zejxa8jaeqjxzwh17w3n5j')
 DEBUG_POST = os.environ.get('AI_TOWN_DEBUG', '0') == '1'
 POST_INTERVAL_SECONDS = 2.0
 FLUSH_INTERVAL_SECONDS = 0.25
@@ -89,21 +95,23 @@ class PresenceHandler(handlers.BaseHandler):
 async def post_batch(session: aiohttp.ClientSession):
   global LAST_POST
   now = time.time()
-  leaves = _collect_leaves(now)
+  _collect_leaves(now)  # 仅用于清理本地缓存
   enters = list(PENDING_ENTER)
-  if not enters and not leaves:
+  if not enters:
     LAST_POST = now
     return
   if enters:
     PENDING_ENTER.clear()
   LAST_POST = now
   url = _mutation_url()
-  payload = {'args': {'enter': enters, 'leave': leaves}}
+  payload = {'names': enters}
+  if AI_TOWN_WORLD_ID:
+    payload['worldId'] = AI_TOWN_WORLD_ID
   try:
     async with session.post(url, json=payload) as resp:
       body = await resp.text()
       if resp.status >= 400 or DEBUG_POST:
-        print(f'presenceSyncMutation POST {url} payload={payload} status={resp.status} body={body}')
+        print(f'presence_import POST {url} payload={payload} status={resp.status} body={body}')
   except Exception as e:
     print(f'Failed to post presence batch: {e}')
 

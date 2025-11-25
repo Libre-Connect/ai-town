@@ -403,12 +403,19 @@ export const presenceImport = httpAction(async (ctx, request) => {
     const worldStatus = await ctx.runQuery(api.world.defaultWorldStatus);
     const worldId = body.worldId ?? worldStatus?.worldId;
     if (!worldId) return new Response('No worldId', { status: 400 });
-    const names = (Array.isArray(body.names) ? body.names : []).map((n) => String(n || '').trim()).filter(Boolean);
-    const count = Math.max(0, Math.min(body.count ?? names.length, 200));
+    const names = (Array.isArray(body.names) ? body.names : [])
+      .map((n) => String(n || '').trim())
+      .filter(Boolean);
+    const MAX_CREATE = 150;
+    const count = Math.max(0, Math.min(body.count ?? names.length, MAX_CREATE));
 
+    // 去重输入并拉取最新的名称集合，避免重复创建相同昵称的 agent
+    const namesUnique = Array.from(new Set(names));
     const descs = await ctx.runQuery(api.world.gameDescriptions, { worldId });
     const existingNames = new Set(
-      (descs.playerDescriptions || []).map((d: any) => String(d.name || '').trim()).filter(Boolean),
+      (descs.playerDescriptions || [])
+        .map((d: any) => String(d.name || '').trim().toLowerCase())
+        .filter(Boolean),
     );
     const usedAssets = new Set(
       (descs.playerDescriptions || [])
@@ -428,8 +435,9 @@ export const presenceImport = httpAction(async (ctx, request) => {
     const pickPersonality = () => (unusedPersonality.length ? unusedPersonality.splice(Math.floor(Math.random() * unusedPersonality.length), 1)[0] : PERSONALITIES[Math.floor(Math.random() * PERSONALITIES.length)]);
 
     let created = 0;
-    for (const name of names.slice(0, count || names.length)) {
-      if (!name || existingNames.has(name)) continue;
+    for (const name of namesUnique.slice(0, count || namesUnique.length)) {
+      const normalized = name.toLowerCase();
+      if (!name || existingNames.has(normalized)) continue;
       const personality = pickPersonality();
       const character = pickAsset();
       await ctx.runMutation(api.aiTown.main.sendInput, {
@@ -437,7 +445,7 @@ export const presenceImport = httpAction(async (ctx, request) => {
         name: 'createAgentDynamic',
         args: { name, character, identity: personality.identity, plan: personality.plan },
       });
-      existingNames.add(name);
+      existingNames.add(normalized);
       created++;
     }
     return new Response(JSON.stringify({ ok: true, created }), {
@@ -593,18 +601,50 @@ function presetPersonalities() {
   const types = [
     '毒舌美食博主', '杠精程序员', '街口大爷', '摇滚乐迷', '段子手', '直球工地师傅', '法学院学生', '大学生刺头',
     '摄影发烧友', '健身小教练', '追星女孩', '二次元宅', '猫咖店员', '咖啡师', '社区志愿者', '自由插画师',
-    '短视频剪辑师', '电竞玩家', '数码发烧友', '理财达人'
+    '短视频剪辑师', '电竞玩家', '数码发烧友', '理财达人', '播客主播', '广播剧配音', '旅行团领队', '剧本杀主持',
+    '独立音乐人', '旧物修理匠', '园艺达人', '调酒学徒', '街舞爱好者', '手工香水师', '桌游店店员', '密室解谜控',
+    '科学科普人', '脱口秀练习生', '城市漫步者', '卡车司机', '房车旅行者', '摄影棚助理', '美剧追更党', 'AI 科研打工人',
+    '方言段子手', '情感电台主播', '户外登山向导', '摩旅骑士', '骑行博主', '篮球陪练', '羽毛球陪练', '长跑教练',
+    '街头魔术师', '花艺学徒', '茶饮研发员', '剧评人', '影迷社团发起人', '模型工作室老板', '桌球爱好者', '网球新手',
+    '海钓玩家', '潜水爱好者', '飞盘教练', '露营装备党', '自驾游策划', '民宿店小二', '滑雪玩家', '冲浪新手',
+    '老物件修复师', '木工 DIY 玩家', '家电维修能手', '城市考古爱好者', '城市乐队键盘手', '口琴街头艺人', '合唱团成员',
+    '配音练习生', '配乐制作人', '漫画脚本作者', '同人写手', '桌游设计师', '密室剧本作者', '独立游戏测试员', '独立游戏策划',
+    '公益组织志愿者', '宠物驯导师', '犬校助理', '猫舍志愿者', '救援队预备队员', '消防宣传志愿者', '社区调解员', '科幻迷',
+    '历史播客作者', '财经解说员', '二手交易达人', '旧书摊主', '城市公共艺术观察者', '地铁拍客', '夜市美食探店人'
   ];
-  const tones = ['嘴碎', '较真', '直球', '爱杠', '毒舌', '冷面', '幽默', '冲动', '仗义', '嘴硬心软'];
+  const tones = [
+    '嘴碎', '较真', '直球', '爱杠', '毒舌', '冷面', '幽默', '冲动', '仗义', '嘴硬心软',
+    '佛系', '乐观', '细腻', '慢热', '社恐但健谈', '热心肠', '温柔吐槽', '稳重', '碎嘴暖男/女', '冷幽默',
+    '高能吐槽', '理性分析', '八卦但有边界', '真诚憨直', '浪漫主义', '现实主义', '乐天派', '谨慎派', '抖包袱型',
+    '讲冷笑话型'
+  ];
   const hobbies = [
     '逛小吃街', '夜跑', '拍街景', '听现场', '剪视频', '撸猫', '打球', '露营', '骑行', '搜集老物件',
     '逛菜市场', '做手工', '玩桌游', '看展', '听脱口秀', '研究咖啡', '学烘焙', '种花', '照顾猫狗', '拍vlog',
-    '收集车票', '画速写', '写日记', '看球', '打羽毛球', '打乒乓', '游泳', '打游戏', '读小说', '看纪录片'
+    '收集车票', '画速写', '写日记', '看球', '打羽毛球', '打乒乓', '游泳', '打游戏', '读小说', '看纪录片',
+    '听播客', '学调酒', '做模型', '淘黑胶', '练口琴', '拍人文街拍', '摆摊卖周边', '学塔罗', '做手账', '夜拍延时',
+    '学编程做小工具', '做电子乐', '做木工', '玩飞盘', '打德扑', '看相声', '玩胶片相机', '刷美食探店',
+    '学吉他', '学钢琴', '写歌词', '做播客剪辑', '拍短片', '写剧本', '练配音', '做香薰蜡烛', '做手作银饰', 'DIY 键盘',
+    '修车', '修自行车', '玩无人机航拍', '玩模型涂装', '玩积木拼装', '蒸馏果酒', '做清酒试酿', '学习咖啡拉花', '练习街舞 popping',
+    '练习 breaking', '城市夜跑', '晨跑', '练瑜伽', '练普拉提', '团课打卡', '做 CrossFit', '跟练跳操', '跳广场舞',
+    '做飞盘狗训练', '做宠物摄影', '城市鸟类观察', '拍植物花草', '露营做饭', '野外生火', '夜观星空', '玩天文望远镜',
+    '写段子', '收集冷笑话', '写吐槽稿子', '练习脱口秀', '做梗图', '看喜剧专场', '模仿配音搞笑', '练习讲故事', '写幽默博客', '录搞笑播客'
   ];
   const goals = [
     '写一条爆笑日常', '点评一家店', '练习表达更有分寸', '组织一次小型活动', '把工具清单做完', '结识新朋友', '把流程梳理清楚', '出一条作品', '约一次局', '完成一个小目标',
     '发一条高赞作品', '找到志同道合的朋友', '把小账本记清楚', '参加一次线下活动', '完成一个迷你挑战', '每周打卡三次运动', '攒够旅行预算', '做一顿拿手菜请人吃', '学会一项新技能', '整理房间与工作台',
-    '修好长期拖延的小事', '做一次城市漫步', '完成一个模型', '出一段练习视频', '写一篇认真长文', '做一个小型分享会', '帮朋友解决一个问题', '为社区做点事情', '刷新作品集', '给自己安排一日休息'
+    '修好长期拖延的小事', '做一次城市漫步', '完成一个模型', '出一段练习视频', '写一篇认真长文', '做一个小型分享会', '帮朋友解决一个问题', '为社区做点事情', '刷新作品集', '给自己安排一日休息',
+    '尝试一天不刷手机', '补齐搁置的博客草稿', '整理硬盘和照片', '学习一句外语并用上', '做一次深度清洁', '完成三公里慢跑', '为朋友准备一个小惊喜', '完成一份作品投稿', '学会一道新菜式', '修好一件旧设备',
+    '更新社交账号形象', '练习一小时乐器', '安排一次家庭小聚', '手绘一张城市小地图', '尝试一周早睡', '录一段播客小片段', '完成一幅水彩练习', '备份资料并整理云盘',
+    '完成一次冷启动直播', '采访一位路人做播客', '做一期城市声音采样', '体验一次陌生人的职业', '做一张自制 zine', '策划一场主题观影', '完成一次公益志愿', '做一张 Lo-fi 混音', '把房车改装清单完成', '拍一组城市夜景',
+    '找到三条小众新闻线索', '学会两道家乡菜', '完成一周无外卖挑战', '做一次手作市集摊主', '录一支配音 demo', '完成一次飞盘小队训练',
+    '做一次播客连麦', '设计一张演出海报', '完成一次人声采样混音', '做一份咖啡测评', '写一篇旅行路线攻略', '做一次城市美食地图', '做一次深夜食堂 vlog', '整理一次闲置转卖', '体验一次陌生的球类运动', '去一次免费展览并写观后感',
+    '录一段街头采访', '策划一场小游戏比赛', '完成一次 10 公里骑行', '帮朋友做一次搬家清单', '做一次宠物摄影作品', '约一次 K 歌合唱', '写一首短诗并分享', '做一份主题歌单', '写一段配音样本', '练习一段脱口秀稿子',
+    '完成一次日出观景打卡', '完成一张插画小稿', '做一次主题读书会', '学会一套拉伸动作', '做一次少糖饮食周', '拍一组胶片照片', '录制一段英语口语日常', '做一次科普小视频', '采访家人做口述史', '完成一次旧衣改造',
+    '做一次桌游主控', '完成一次剧本杀主持', '写一段游戏剧情', '做一个小游戏关卡', '修好一把坏吉他', '做一次茶会小聚', '完善一次理财表格', '完成一次卧推目标', '跑一次 5 公里配速挑战', '尝试无手机半天',
+    '整理出一份家乡小吃榜', '做一次社区志愿服务', '探访一间独立书店', '在公园打一次羽毛球', '联系一个冷门社群', '学会一个新魔术', '学会一个新调酒配方', '写一段感想并打印出来', '做一次手账周记', '练习一首钢琴曲',
+    '完成一张复古海报设计', '写一篇科普短文', '做一次夜市探店直播', '记录一次父母的故事', '整理一份城市植物清单', '制作一条手机壳手绳', '练习一段街舞组合', '做一次无人机航拍剪辑', '完成一份课程学习打卡',
+    '写十个短段子并试讲', '准备一场开放麦小稿', '做一张梗图并发出去', '模仿一次配音恶搞', '写一段冷笑话合集', '录一段搞笑播客小片段', '做一次喜剧专场笔记', '编一个整活小剧本', '讲一个暖心笑话给朋友', '收集五个城市趣事'
   ];
   const out: Array<{ identity: string; plan: string }> = [];
   for (let i = 0; i < types.length; i++) {

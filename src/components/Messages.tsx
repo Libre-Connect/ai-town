@@ -93,15 +93,15 @@ export function Messages({
     const segs = splitSegments(m.text, m.authorName);
     return segs.map((seg, i) => {
       const node = (
-        <div key={`text-${m._id}-${i}`} className="leading-tight mb-6">
-          <div className="flex gap-4">
-            <span className="uppercase flex-grow">{seg.name}</span>
-            <time dateTime={m._creationTime.toString()}>
+        <div key={`text-${m._id}-${i}`} className="leading-snug mb-6">
+          <div className="flex gap-4 items-center">
+            <span className="uppercase flex-grow font-semibold tracking-wide">{seg.name}</span>
+            <time dateTime={m._creationTime.toString()} className="text-base sm:text-sm text-gray-600">
               {new Date(m._creationTime).toLocaleString('zh-CN')}
             </time>
           </div>
           <div className={clsx('bubble', m.author === humanPlayerId && 'bubble-mine', bubbleVariant(seg.name))}>
-            <p className="bubble-content -mx-3 -my-1">{seg.content}</p>
+            <p className="bubble-content -mx-3 -my-1 leading-relaxed">{seg.content}</p>
           </div>
         </div>
       );
@@ -122,7 +122,7 @@ export function Messages({
       if (started) {
         membershipNodes.push({
           node: (
-            <div key={`joined-${playerId}`} className="leading-tight mb-6">
+            <div key={`joined-${playerId}`} className="leading-snug mb-6">
               <p className="text-brown-700 text-center">{playerName} 加入了对话。</p>
             </div>
           ),
@@ -137,8 +137,8 @@ export function Messages({
       const started = conversation.doc.created;
       membershipNodes.push({
         node: (
-          <div key={`joined-${playerId}`} className="leading-tight mb-6">
-              <p className="text-brown-700 text-center">{playerName} 加入了对话。</p>
+          <div key={`joined-${playerId}`} className="leading-snug mb-6">
+            <p className="text-brown-700 text-center">{playerName} 加入了对话。</p>
           </div>
         ),
         time: started,
@@ -146,8 +146,8 @@ export function Messages({
       const ended = conversation.doc.ended;
       membershipNodes.push({
         node: (
-          <div key={`left-${playerId}`} className="leading-tight mb-6">
-              <p className="text-brown-700 text-center">{playerName} 离开了对话。</p>
+          <div key={`left-${playerId}`} className="leading-snug mb-6">
+            <p className="text-brown-700 text-center">{playerName} 离开了对话。</p>
           </div>
         ),
         // Always sort all "left" messages after the last message.
@@ -159,19 +159,19 @@ export function Messages({
   const nodes = [...messageNodes, ...membershipNodes];
   nodes.sort((a, b) => a.time - b.time);
   return (
-    <div className="chats text-base sm:text-sm">
-      <div className="bg-brown-200 text-black p-2">
+    <div className="chats text-xl sm:text-lg leading-relaxed">
+      <div className="bg-brown-200 text-black p-3 sm:p-2">
         {nodes.length > 0 && nodes.map((n) => n.node)}
         {currentlyTyping && currentlyTyping.playerId !== humanPlayerId && (
-          <div key="typing" className="leading-tight mb-6">
-            <div className="flex gap-4">
-              <span className="uppercase flex-grow">{currentlyTypingName}</span>
-              <time dateTime={currentlyTyping.since.toString()}>
+          <div key="typing" className="leading-snug mb-6">
+            <div className="flex gap-4 items-center">
+              <span className="uppercase flex-grow font-semibold tracking-wide">{currentlyTypingName}</span>
+              <time dateTime={currentlyTyping.since.toString()} className="text-base sm:text-sm text-gray-600">
                 {new Date(currentlyTyping.since).toLocaleString('zh-CN')}
               </time>
             </div>
             <div className={clsx('bubble', bubbleVariant(currentlyTyping.playerId))}>
-              <p className="bubble-content -mx-3 -my-1">
+              <p className="bubble-content -mx-3 -my-1 leading-relaxed">
                 <i>正在输入...</i>
               </p>
             </div>
