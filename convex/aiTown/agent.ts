@@ -52,7 +52,10 @@ export class Agent {
   tick(game: Game, now: number) {
     const player = game.world.players.get(this.playerId);
     if (!player) {
-      throw new Error(`Invalid player ID ${this.playerId}`);
+      console.warn(`Removing agent ${this.id} with invalid player ${this.playerId}`);
+      game.world.agents.delete(this.id);
+      game.agentDescriptions.delete(this.id);
+      return;
     }
     if (this.inProgressOperation) {
       if (now < this.inProgressOperation.started + ACTION_TIMEOUT) {
@@ -249,10 +252,11 @@ export class Agent {
       );
     }
     const operationId = game.allocId('operations');
-    console.log(`Agent ${this.id} starting operation ${name} (${operationId})`);
-    game.scheduleOperation(name, { operationId, ...args } as any);
+    const opName = String(name);
+    console.log(`Agent ${this.id} starting operation ${opName} (${operationId})`);
+    game.scheduleOperation(opName, { operationId, ...args } as any);
     this.inProgressOperation = {
-      name,
+      name: opName,
       operationId,
       started: now,
     };

@@ -45,11 +45,9 @@ const CHARACTER_ASSETS = [
   '234.png',
 ];
 
-const DISCOVERY_GENERATION_PROBABILITY = 0.05;
+const DISCOVERY_GENERATION_PROBABILITY = 0.005;
 const POLLINATIONS_MODEL = 'flux';
 const POLLINATIONS_TOKEN = 'r5bQfseAxxaO7YNc';
-
-type Placement = { x: number; y: number };
 
 function pollinationsImageUrl(prompt: string, seed = Date.now()) {
   const params = new URLSearchParams({
@@ -160,11 +158,6 @@ export const agentDoSomething = internalAction({
     const { player, agent } = args;
     const map = new WorldMap(args.map);
     const now = Date.now();
-    const generation = await ctx.runQuery(api.world.generationBudget, { worldId: args.worldId });
-    const windowMs = 20 * 60 * 1000;
-    const windowExpired = now - (generation.windowStart ?? 0) > windowMs;
-    const windowStart = windowExpired ? now : generation.windowStart ?? now;
-    const windowCount = windowExpired ? 0 : generation.windowCount ?? 0;
     // Don't try to start a new conversation if we were just in one.
     const justLeftConversation =
       agent.lastConversation && now < agent.lastConversation + CONVERSATION_COOLDOWN;
@@ -218,9 +211,7 @@ export const agentDoSomething = internalAction({
 
     // TODO: We hit a lot of OCC errors on sending inputs in this file. It's
     // easy for them to get scheduled at the same time and line up in time.
-    const canUseBucket = generation.bucket > generation.lastGenerationBucket;
-    const canUseWindow = windowCount < 2;
-    const doGenerate = canUseBucket && canUseWindow && Math.random() < DISCOVERY_GENERATION_PROBABILITY;
+    const doGenerate = Math.random() < DISCOVERY_GENERATION_PROBABILITY;
     if (doGenerate) {
       const kind: 'building' | 'item' = Math.random() < 0.5 ? 'building' : 'item';
       const sys = 'You are a pixel art assistant. Output only an English prompt, no explanations.';
@@ -241,7 +232,8 @@ export const agentDoSomething = internalAction({
       const base = wanderDestination(map);
       const w = kind === 'building' ? 3 + Math.floor(Math.random() * 4) : 1;
       const h = kind === 'building' ? 3 + Math.floor(Math.random() * 4) : 1;
-      const free = findFreePlacement(map, { x: base.x, y: base.y }, { x: w, y: h });
+      const x = Math.max(0, Math.min(map.width - w, base.x));
+      const y = Math.max(0, Math.min(map.height - h, base.y));
       await sleep(Math.random() * 1000);
       await ctx.runMutation(api.aiTown.main.sendInput, {
         worldId: args.worldId,
@@ -249,16 +241,10 @@ export const agentDoSomething = internalAction({
         args: {
           playerId: player.id,
           item: { name: english, imageUrl },
-          place: free,
+          place: { x, y },
           kind,
           size: { w, h },
         },
-      });
-      await ctx.runMutation(api.world.setGenerationBucket, {
-        worldId: args.worldId,
-        bucket: generation.bucket,
-        windowStart,
-        windowCount: windowCount + 1,
       });
       await ctx.runMutation(api.aiTown.main.sendInput, {
         worldId: args.worldId,
@@ -338,59 +324,6 @@ function wanderDestination(worldMap: WorldMap) {
   return {
     x: 1 + Math.floor(Math.random() * (worldMap.width - 2)),
     y: 1 + Math.floor(Math.random() * (worldMap.height - 2)),
-  };
-}
-
-function buildOccupiedTiles(worldMap: WorldMap) {
-  const occupied = new Set<string>();
-  for (const sprite of worldMap.animatedSprites) {
-    const tilesW = Math.max(1, Math.ceil(sprite.w / worldMap.tileDim));
-    const tilesH = Math.max(1, Math.ceil(sprite.h / worldMap.tileDim));
-    const baseX = Math.floor(sprite.x / worldMap.tileDim);
-    const baseY = Math.floor(sprite.y / worldMap.tileDim);
-    for (let dx = 0; dx < tilesW; dx++) {
-      for (let dy = 0; dy < tilesH; dy++) {
-        occupied.add(`${baseX + dx},${baseY + dy}`);
-      }
-    }
-  }
-  return occupied;
-}
-
-function findFreePlacement(worldMap: WorldMap, start: Placement, size: Placement): Placement {
-  const occupied = buildOccupiedTiles(worldMap);
-  const fits = (x: number, y: number) => {
-    if (x < 0 || y < 0 || x + size.x > worldMap.width || y + size.y > worldMap.height) return false;
-    for (let dx = 0; dx < size.x; dx++) {
-      for (let dy = 0; dy < size.y; dy++) {
-        if (occupied.has(`${x + dx},${y + dy}`)) return false;
-      }
-    }
-    return true;
-  };
-  const maxRadius = Math.max(worldMap.width, worldMap.height);
-  for (let r = 0; r <= maxRadius; r++) {
-    for (let dx = -r; dx <= r; dx++) {
-      const dyCandidates = [r, -r];
-      for (const dy of dyCandidates) {
-        const x = start.x + dx;
-        const y = start.y + dy;
-        if (fits(x, y)) return { x, y };
-      }
-    }
-    for (let dy = -r + 1; dy <= r - 1; dy++) {
-      const dxCandidates = [r, -r];
-      for (const dx of dxCandidates) {
-        const x = start.x + dx;
-        const y = start.y + dy;
-        if (fits(x, y)) return { x, y };
-      }
-    }
-  }
-  // Fallback: clamp to map bounds.
-  return {
-    x: Math.max(0, Math.min(worldMap.width - size.x, start.x)),
-    y: Math.max(0, Math.min(worldMap.height - size.y, start.y)),
   };
 }
 export const importBilibiliUsers = httpAction(async (ctx, request) => {
@@ -638,17 +571,13 @@ export const generateImageItem = httpAction(async (ctx, request) => {
     const cx = Math.floor((area.x1 + area.x2) / 2);
     const cy = Math.floor((area.y1 + area.y2) / 2);
     const size = kind === 'building' ? { w: Math.max(3, w), h: Math.max(3, h) } : { w: 1, h: 1 };
-    const requested = kind === 'building' ? { x: minx, y: miny } : { x: cx, y: cy };
-    const gameDesc = await ctx.runQuery(api.world.gameDescriptions, { worldId });
-    const map = new WorldMap(gameDesc.worldMap);
-    const free = findFreePlacement(map, requested, size as any);
     await ctx.runMutation(api.aiTown.main.sendInput, {
       worldId,
       name: 'discoverItem',
       args: {
         playerId,
         item: { name: english, imageUrl },
-        place: free,
+        place: kind === 'building' ? { x: minx, y: miny } : { x: cx, y: cy },
         kind,
         size,
       },

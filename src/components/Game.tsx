@@ -21,6 +21,7 @@ export default function Game() {
     kind: 'player';
     id: GameId<'players'>;
   }>();
+  // 前端内存观众已禁用
   const [banner, setBanner] = useState<{ name: string; character?: string; kind: 'join' | 'leave' } | null>(null);
   const bannerQueueRef = useRef<Array<{ name: string; character?: string; kind: 'join' | 'leave' }>>([]);
   const lastAgentIdsRef = useRef<Set<string>>(new Set());
@@ -85,6 +86,7 @@ export default function Game() {
   if (!worldId || !engineId || !game) {
     return null;
   }
+
   return (
     <>
       {banner && (
@@ -122,6 +124,7 @@ https://github.com/michalochman/react-pixi-fiber/issues/145#issuecomment-5315492
               </Stage>
             </div>
           </div>
+          {/* 前端内存/快速创建 UI 已禁用 */}
         </div>
         {/* Right column livestream chat */}
         <div

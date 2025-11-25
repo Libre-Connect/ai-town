@@ -39,7 +39,7 @@ export async function startConversationMessage(
   );
 
   const memoryWithOtherPlayer = memories.find(
-    (m) => m.data.type === 'conversation' && m.data.playerIds.includes(otherPlayerId),
+    (m: any) => m.data.type === 'conversation' && m.data.playerIds.includes(otherPlayerId),
   );
   const conflict = Math.random() < 0.2;
   const prompt = [
