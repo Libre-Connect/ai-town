@@ -17,6 +17,7 @@ import { chatCompletion } from '../util/llm';
 import { characters } from '../../data/characters';
 import { Id } from '../_generated/dataModel';
 import { v } from 'convex/values';
+import { distance } from '../util/geometry';
 const CHARACTER_ASSET_DIR = '/ai-town/assets/characters';
 const CHARACTER_ASSETS = [
   '1.png',
@@ -433,6 +434,7 @@ export const presenceImport = httpAction(async (ctx, request) => {
       worldId?: Id<'worlds'>;
       names?: string[];
       count?: number;
+      leaves?: string[];
     };
     const worldStatus = await ctx.runQuery(api.world.defaultWorldStatus);
     const worldId = body.worldId ?? worldStatus?.worldId;
@@ -440,11 +442,15 @@ export const presenceImport = httpAction(async (ctx, request) => {
     const names = (Array.isArray(body.names) ? body.names : [])
       .map((n) => String(n || '').trim())
       .filter(Boolean);
+    const leaves = (Array.isArray(body.leaves) ? body.leaves : [])
+      .map((n) => String(n || '').trim())
+      .filter(Boolean);
     const MAX_CREATE = 150;
     const count = Math.max(0, Math.min(body.count ?? names.length, MAX_CREATE));
 
     // 去重输入并拉取最新的名称集合，避免重复创建相同昵称的 agent
     const namesUnique = Array.from(new Set(names));
+    const leavesUnique = Array.from(new Set(leaves.map((n) => n.toLowerCase())));
     const descs = await ctx.runQuery(api.world.gameDescriptions, { worldId });
     const existingNames = new Set(
       (descs.playerDescriptions || [])
@@ -468,6 +474,27 @@ export const presenceImport = httpAction(async (ctx, request) => {
     const unusedPersonality = PERSONALITIES.filter((p) => !usedPersonality.has(p.identity));
     const pickPersonality = () => (unusedPersonality.length ? unusedPersonality.splice(Math.floor(Math.random() * unusedPersonality.length), 1)[0] : PERSONALITIES[Math.floor(Math.random() * PERSONALITIES.length)]);
 
+    // Handle leaves: remove matching players by name.
+    let removed = 0;
+    if (leavesUnique.length) {
+      const nameToPlayerId = new Map<string, string>();
+      for (const d of descs.playerDescriptions || []) {
+        const key = String(d.name || '').trim().toLowerCase();
+        if (key) nameToPlayerId.set(key, d.playerId);
+      }
+      for (const leaveName of leavesUnique) {
+        const playerId = nameToPlayerId.get(leaveName);
+        if (playerId) {
+          await ctx.runMutation(api.aiTown.main.sendInput, {
+            worldId,
+            name: 'leave',
+            args: { playerId },
+          });
+          removed++;
+        }
+      }
+    }
+
     let created = 0;
     for (const name of namesUnique.slice(0, count || namesUnique.length)) {
       const normalized = name.toLowerCase();
@@ -483,6 +510,76 @@ export const presenceImport = httpAction(async (ctx, request) => {
       created++;
     }
     return new Response(JSON.stringify({ ok: true, created }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } catch (e: any) {
+    return new Response(String(e?.message || e), { status: 500 });
+  }
+});
+
+export const danmakuMessage = httpAction(async (ctx, request) => {
+  try {
+    const body = (await request.json()) as {
+      worldId?: Id<'worlds'>;
+      name?: string;
+      text?: string;
+    };
+    const worldStatus = await ctx.runQuery(api.world.defaultWorldStatus);
+    const worldId = body.worldId ?? worldStatus?.worldId;
+    if (!worldId) return new Response('No worldId', { status: 400 });
+    const text = String(body.text || '').trim();
+    const name = String(body.name || '').trim();
+    if (!name || !text) return new Response('Missing name/text', { status: 400 });
+
+    const descriptions = await ctx.runQuery(api.world.gameDescriptions, { worldId });
+    const playerByName = new Map(
+      (descriptions.playerDescriptions || []).map((d: any) => [String(d.name || '').trim().toLowerCase(), d.playerId]),
+    );
+    const playerId = playerByName.get(name.toLowerCase());
+    if (!playerId) return new Response('Name not found', { status: 404 });
+
+    const worldState = await ctx.runQuery(api.world.worldState, { worldId });
+    const world = worldState?.world;
+    if (!world) return new Response('No world state', { status: 500 });
+
+    const conversations = world.conversations;
+    const existingConv = conversations.find((c: any) => (c.participants || []).some((p: any) => p.playerId === playerId));
+    let conversationId = existingConv?.id;
+    if (!conversationId) {
+      // Find nearest other player to start a conversation.
+      const me = world.players.find((p: any) => p.id === playerId);
+      if (!me) return new Response('Player not found', { status: 404 });
+      const others = world.players.filter((p: any) => p.id !== playerId);
+      let nearest = null;
+      let bestDist = Infinity;
+      for (const o of others) {
+        const d = distance(me.position, o.position);
+        if (d < bestDist) {
+          bestDist = d;
+          nearest = o;
+        }
+      }
+      if (!nearest) return new Response('No nearby player to chat with', { status: 400 });
+      await ctx.runMutation(api.aiTown.main.sendInput, {
+        worldId,
+        name: 'startConversation',
+        args: { playerId, invitee: nearest.id },
+      });
+      // Conversation will start asynchronously; return.
+      return new Response(JSON.stringify({ ok: true, started: true, queued: true }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Inject the danmaku as a message in the existing conversation.
+    await ctx.runMutation(api.messages.writeMessage, {
+      worldId,
+      conversationId,
+      playerId,
+      text,
+      messageUuid: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}`,
+    });
+    return new Response(JSON.stringify({ ok: true, delivered: true }), {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (e: any) {

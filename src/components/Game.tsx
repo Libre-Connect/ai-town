@@ -26,6 +26,7 @@ export default function Game() {
   const bannerQueueRef = useRef<Array<{ name: string; character?: string; kind: 'join' | 'leave' }>>([]);
   const lastAgentIdsRef = useRef<Set<string>>(new Set());
   const nameCacheRef = useRef<Map<string, { name: string; character?: string }>>(new Map());
+  const lastWorldIdRef = useRef<string | undefined>(undefined);
   const [gameWrapperRef, { width, height }] = useElementSize();
 
   const worldStatus = useQuery(api.world.defaultWorldStatus);
@@ -44,6 +45,13 @@ export default function Game() {
 
   useEffect(() => {
     if (!game) return;
+    const worldKey = String(worldId ?? 'none');
+    if (lastWorldIdRef.current !== worldKey) {
+      lastWorldIdRef.current = worldKey;
+      lastAgentIdsRef.current = new Set();
+      nameCacheRef.current.clear();
+      bannerQueueRef.current = [];
+    }
     const currentIds = new Set<string>([...game.agentDescriptions.keys()].map((id) => String(id)));
     const last = lastAgentIdsRef.current;
     for (const id of currentIds) {
@@ -82,7 +90,7 @@ export default function Game() {
         setBanner(null);
       }, 4000);
     }
-  }, [game, banner]);
+  }, [game, banner, worldId, game?.world.agents.size, game?.agentDescriptions.size]);
 
   if (!worldId || !engineId || !game) {
     return null;

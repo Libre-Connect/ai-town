@@ -38,6 +38,10 @@ if 'presenceSyncMutation' in AI_TOWN_MUTATION:
 # 兼容旧默认（无 /http 前缀）写法
 if AI_TOWN_MUTATION == '/presence_import':
   AI_TOWN_MUTATION = '/http/presence_import'
+# 弹幕消息上报端点
+AI_TOWN_DANMAKU = os.environ.get('AI_TOWN_DANMAKU', '/http/danmaku_message')
+if AI_TOWN_DANMAKU == '/danmaku_message':
+  AI_TOWN_DANMAKU = '/http/danmaku_message'
 # worldId 可通过环境变量 AI_TOWN_WORLD_ID 传入；如果你有固定 worldId，可写成默认值
 AI_TOWN_WORLD_ID = os.environ.get('AI_TOWN_WORLD_ID', 'm17et29rc7zejxa8jaeqjxzwh17w3n5j')
 DEBUG_POST = os.environ.get('AI_TOWN_DEBUG', '0') == '1'
@@ -54,6 +58,11 @@ def _mutation_url():
   if AI_TOWN_MUTATION.startswith('http://') or AI_TOWN_MUTATION.startswith('https://'):
     return AI_TOWN_MUTATION
   return f'{AI_TOWN_SERVER.rstrip("/")}{AI_TOWN_MUTATION}'
+
+def _danmaku_url():
+  if AI_TOWN_DANMAKU.startswith('http://') or AI_TOWN_DANMAKU.startswith('https://'):
+    return AI_TOWN_DANMAKU
+  return f'{AI_TOWN_SERVER.rstrip("/")}{AI_TOWN_DANMAKU}'
 
 
 def _add_name(name: str):
@@ -82,29 +91,31 @@ class PresenceHandler(handlers.BaseHandler):
   # 普通弹幕
   def _on_danmaku(self, client, message):
     _add_name(message.uname)
+    asyncio.create_task(post_danmaku(client.session, message.uname, message.msg))
 
   # 开放平台弹幕
   def _on_open_live_danmaku(self, client, message):
     _add_name(message.uname)
+    asyncio.create_task(post_danmaku(client.session, message.uname, message.msg))
 
   # 开放平台进房
-  def _on_open_live_enter_room(self, client, message):
-    _add_name(message.uname)
+def _on_open_live_enter_room(self, client, message):
+  _add_name(message.uname)
 
 
 async def post_batch(session: aiohttp.ClientSession):
   global LAST_POST
   now = time.time()
-  _collect_leaves(now)  # 仅用于清理本地缓存
+  leaves = _collect_leaves(now)
   enters = list(PENDING_ENTER)
-  if not enters:
+  if not enters and not leaves:
     LAST_POST = now
     return
   if enters:
     PENDING_ENTER.clear()
   LAST_POST = now
   url = _mutation_url()
-  payload = {'names': enters}
+  payload = {'names': enters, 'leaves': leaves}
   if AI_TOWN_WORLD_ID:
     payload['worldId'] = AI_TOWN_WORLD_ID
   try:
@@ -114,6 +125,19 @@ async def post_batch(session: aiohttp.ClientSession):
         print(f'presence_import POST {url} payload={payload} status={resp.status} body={body}')
   except Exception as e:
     print(f'Failed to post presence batch: {e}')
+
+async def post_danmaku(session: aiohttp.ClientSession, name: str, text: str):
+  url = _danmaku_url()
+  payload = {'name': name, 'text': text}
+  if AI_TOWN_WORLD_ID:
+    payload['worldId'] = AI_TOWN_WORLD_ID
+  try:
+    async with session.post(url, json=payload) as resp:
+      body = await resp.text()
+      if resp.status >= 400 or DEBUG_POST:
+        print(f'danmaku POST {url} payload={payload} status={resp.status} body={body}')
+  except Exception as e:
+    print(f'Failed to post danmaku: {e}')
 
 
 async def presence_flush_loop(session: aiohttp.ClientSession):

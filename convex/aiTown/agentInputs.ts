@@ -62,8 +62,12 @@ export const agentInputs = {
         if (!invitee) {
           throw new Error(`Couldn't find player: ${inviteeId}`);
         }
-        Conversation.start(game, now, player, invitee);
-        agent.lastInviteAttempt = now;
+        const { conversationId, error } = Conversation.start(game, now, player, invitee);
+        if (conversationId) {
+          agent.lastInviteAttempt = now;
+        } else if (error) {
+          console.log(`Agent ${agentId} invite skipped: ${error}`);
+        }
       }
       if (args.destination) {
         movePlayer(game, now, player, args.destination);

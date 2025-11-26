@@ -91,6 +91,16 @@ export function Messages({
   }
   const messageNodes: { time: number; node: React.ReactNode }[] = messages.flatMap((m) => {
     const segs = splitSegments(m.text, m.authorName);
+    const imageNode =
+      m.imageUrl && (
+        <div className="mt-1">
+          <img
+            src={m.imageUrl}
+            alt={m.imagePrompt || '生成的图片'}
+            className="max-w-full rounded border border-gray-200"
+          />
+        </div>
+      );
     return segs.map((seg, i) => {
       const node = (
         <div key={`text-${m._id}-${i}`} className="leading-snug mb-6">
@@ -103,18 +113,7 @@ export function Messages({
           <div className={clsx('bubble', m.author === humanPlayerId && 'bubble-mine', bubbleVariant(seg.name))}>
             <div className="bubble-content -mx-3 -my-1 leading-relaxed space-y-2">
               {seg.content && <p className="leading-relaxed">{seg.content}</p>}
-              {m.imageUrl && i === 0 && (
-                <div className="mt-1">
-                  <img
-                    src={m.imageUrl}
-                    alt={m.imagePrompt || '生成的图片'}
-                    className="max-w-full rounded border border-gray-200"
-                  />
-                  {m.imagePrompt && (
-                    <p className="text-xs text-gray-700 mt-1 break-words">{m.imagePrompt}</p>
-                  )}
-                </div>
-              )}
+              {i === 0 && imageNode}
             </div>
           </div>
         </div>

@@ -1,6 +1,6 @@
 import { BaseTexture, ISpritesheetData, Spritesheet } from 'pixi.js';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { AnimatedSprite, Container, Graphics, Text } from '@pixi/react';
+import { AnimatedSprite, Container, Graphics, Text, Sprite } from '@pixi/react';
 import * as PIXI from 'pixi.js';
 
 export const Character = ({
@@ -19,6 +19,8 @@ export const Character = ({
   name,
   speechText,
   speechColor,
+  speechImageUrl,
+  speechStackIndex = 0,
 }: {
   // Path to the texture packed image.
   textureUrl: string;
@@ -42,6 +44,8 @@ export const Character = ({
   name?: string;
   speechText?: string;
   speechColor?: number;
+  speechImageUrl?: string;
+  speechStackIndex?: number;
 }) => {
   const [spriteSheet, setSpriteSheet] = useState<Spritesheet>();
   const makeGridSpritesheetData = async (url: string): Promise<ISpritesheetData> => {
@@ -148,12 +152,14 @@ export const Character = ({
       {emoji && (
         <Text zIndex={15} x={0} y={-24} scale={{ x: -0.8, y: 0.8 }} text={emoji} anchor={{ x: 0.5, y: 0.5 }} />
       )}
-      {speechText && (
+      {(speechText || speechImageUrl) && (
         (() => {
           const paddingX = 12;
           const paddingY = 10;
           const fontSize = 16;
           const w = 240;
+          const imageH = speechImageUrl ? 120 : 0;
+          const imageMargin = speechImageUrl ? 8 : 0;
           const style = new PIXI.TextStyle({
             fill: 0x000000,
             fontSize,
@@ -165,10 +171,12 @@ export const Character = ({
             breakWords: true,
             lineHeight: fontSize + 4,
           });
-          const metrics = PIXI.TextMetrics.measureText(speechText, style);
-          const h = Math.max(fontSize + paddingY * 2, metrics.height + paddingY * 2);
+          const metrics = PIXI.TextMetrics.measureText(speechText || '', style);
+          const textHeight = speechText ? metrics.height : 0;
+          const h = Math.max(fontSize + paddingY * 2, textHeight + paddingY * 2 + imageH + imageMargin);
+          const stackOffset = speechStackIndex * (h + 10);
           return (
-            <Container x={0} y={-48} zIndex={20}>
+            <Container x={0} y={-48 - stackOffset} zIndex={20}>
               <Graphics
                 draw={(g) => {
                   g.clear();
@@ -178,7 +186,28 @@ export const Character = ({
                   g.endFill();
                 }}
               />
-              <Text zIndex={21} x={0} y={-h / 2} text={speechText} anchor={{ x: 0.5, y: 0.5 }} style={style} />
+              {speechText && (
+                <Text
+                  zIndex={21}
+                  x={0}
+                  y={speechImageUrl ? -h / 2 + paddingY : -h / 2}
+                  text={speechText}
+                  anchor={{ x: 0.5, y: speechImageUrl ? 0 : 0.5 }}
+                  style={style}
+                />
+              )}
+              {speechImageUrl && (
+                <Sprite
+                  image={speechImageUrl}
+                  width={160}
+                  height={120}
+                  x={0}
+                  y={speechText ? -h / 2 + (textHeight || fontSize) + imageMargin + 10 : -h / 2 + paddingY}
+                  anchor={{ x: 0.5, y: 0 }}
+                  scale={{ x: 1, y: 1 }}
+                  zIndex={22}
+                />
+              )}
             </Container>
           );
         })()

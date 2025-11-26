@@ -53,7 +53,7 @@ export const INPUT_DELAY = 1000;
 export const NUM_MEMORIES_TO_SEARCH = 3;
 
 // Wait for at least two seconds before sending another message.
-export const MESSAGE_COOLDOWN = 2000;
+export const MESSAGE_COOLDOWN = 4000;
 
 // Don't run a turn of the agent more than once a second.
 export const AGENT_WAKEUP_THRESHOLD = 1000;
@@ -62,7 +62,7 @@ export const AGENT_WAKEUP_THRESHOLD = 1000;
 export const VACUUM_MAX_AGE = 2 * 7 * 24 * 60 * 60 * 1000;
 export const DELETE_BATCH_SIZE = 64;
 
-export const HUMAN_IDLE_TOO_LONG = 5 * 60 * 1000;
+export const HUMAN_IDLE_TOO_LONG = 20 * 60 * 1000;
 
 export const ACTIVITIES = [
   { description: 'reading a book', emoji: '📖', duration: 60_000 },

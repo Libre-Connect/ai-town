@@ -72,6 +72,8 @@ export const Player = ({
     );
   let speechText: string | undefined;
   let speechColor = 0x333333;
+  let speechImageUrl: string | undefined;
+  let speechStackIndex = 0;
   {
     const palette = [0xe57373, 0x64b5f6, 0xffd54f, 0x81c784, 0xba68c8, 0xa1887f];
     let sum = 0;
@@ -82,12 +84,20 @@ export const Player = ({
   const lastMessage = recentMessagesByPlayer?.get(player.id);
   if (lastMessage) {
     const now = Date.now();
-    if (now - lastMessage._creationTime < 12000) {
-      const t = (lastMessage.imagePrompt || lastMessage.text || '').trim();
+    if (now - lastMessage._creationTime < 20000) {
+      speechImageUrl = lastMessage.imageUrl;
+      const t = (lastMessage.text || lastMessage.imagePrompt || '').trim();
       if (t) {
         speechText = t;
+      } else if (speechImageUrl) {
+        speechText = '（图片）';
       }
     }
+  }
+  const playerConversation = game.world.playerConversation(player);
+  if (playerConversation) {
+    const ids = [...playerConversation.participants.keys()].sort();
+    speechStackIndex = ids.findIndex((id) => id === player.id);
   }
   const tileDim = game.worldMap.tileDim;
   const historicalFacing = { dx: historicalLocation.dx, dy: historicalLocation.dy };
@@ -114,6 +124,8 @@ export const Player = ({
         }}
         speechText={speechText}
         speechColor={speechColor}
+        speechImageUrl={speechImageUrl}
+        speechStackIndex={speechStackIndex}
         name={playerName}
       />
     </>

@@ -120,6 +120,12 @@ export class Conversation {
   }
 
   static start(game: Game, now: number, player: Player, invitee: Player) {
+    // Only allow one active conversation at a time to keep the scene focused.
+    if (game.world.conversations.size > 0) {
+      const reason = `Another conversation is already in progress`;
+      console.log(reason);
+      return { error: reason };
+    }
     if (player.id === invitee.id) {
       throw new Error(`Can't invite yourself to a conversation`);
     }
@@ -255,7 +261,7 @@ export const conversationInputs = {
       playerId,
       invitee: playerId,
     },
-    handler: (game: Game, now: number, args): GameId<'conversations'> => {
+    handler: (game: Game, now: number, args): GameId<'conversations'> | null => {
       const playerId = parseGameId('players', args.playerId);
       const player = game.world.players.get(playerId);
       if (!player) {
@@ -269,8 +275,12 @@ export const conversationInputs = {
       console.log(`Starting ${playerId} ${inviteeId}...`);
       const { conversationId, error } = Conversation.start(game, now, player, invitee);
       if (!conversationId) {
-        // TODO: pass it back to the client for them to show an error.
-        throw new Error(error);
+        // Avoid throwing for "busy" errors; silently drop the invite.
+        if (error) {
+          console.log(`Start conversation skipped: ${error}`);
+          return null;
+        }
+        throw new Error('Failed to start conversation');
       }
       return conversationId;
     },
