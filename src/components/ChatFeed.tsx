@@ -51,7 +51,7 @@ export default function ChatFeed({ worldId, scrollViewRef }: { worldId: Id<'worl
             <img
               src={m.imageUrl}
               alt={m.imagePrompt || '生成的图片'}
-              className="max-w-full rounded border border-gray-200"
+              className="max-w-[220px] rounded border border-gray-200"
             />
           </div>
         );

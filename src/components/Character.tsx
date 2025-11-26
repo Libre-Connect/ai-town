@@ -157,9 +157,9 @@ export const Character = ({
           const paddingX = 12;
           const paddingY = 10;
           const fontSize = 16;
-          const w = 240;
-          const imageH = speechImageUrl ? 120 : 0;
-          const imageMargin = speechImageUrl ? 8 : 0;
+          const w = 220;
+          const imageH = speechImageUrl ? 90 : 0;
+          const imageMargin = speechImageUrl ? 6 : 0;
           const style = new PIXI.TextStyle({
             fill: 0x000000,
             fontSize,
@@ -173,8 +173,11 @@ export const Character = ({
           });
           const metrics = PIXI.TextMetrics.measureText(speechText || '', style);
           const textHeight = speechText ? metrics.height : 0;
-          const h = Math.max(fontSize + paddingY * 2, textHeight + paddingY * 2 + imageH + imageMargin);
-          const stackOffset = speechStackIndex * (h + 10);
+          const h = Math.max(
+            fontSize + paddingY * 2,
+            textHeight + paddingY * 2 + imageH + imageMargin,
+          );
+          const stackOffset = speechStackIndex * (h + 20);
           return (
             <Container x={0} y={-48 - stackOffset} zIndex={20}>
               <Graphics
@@ -199,8 +202,8 @@ export const Character = ({
               {speechImageUrl && (
                 <Sprite
                   image={speechImageUrl}
-                  width={160}
-                  height={120}
+                  width={140}
+                  height={90}
                   x={0}
                   y={speechText ? -h / 2 + (textHeight || fontSize) + imageMargin + 10 : -h / 2 + paddingY}
                   anchor={{ x: 0.5, y: 0 }}

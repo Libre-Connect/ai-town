@@ -91,16 +91,16 @@ export function Messages({
   }
   const messageNodes: { time: number; node: React.ReactNode }[] = messages.flatMap((m) => {
     const segs = splitSegments(m.text, m.authorName);
-    const imageNode =
-      m.imageUrl && (
-        <div className="mt-1">
-          <img
-            src={m.imageUrl}
-            alt={m.imagePrompt || '生成的图片'}
-            className="max-w-full rounded border border-gray-200"
-          />
-        </div>
-      );
+      const imageNode =
+        m.imageUrl && (
+          <div className="mt-1">
+            <img
+              src={m.imageUrl}
+              alt={m.imagePrompt || '生成的图片'}
+              className="max-w-[220px] rounded border border-gray-200"
+            />
+          </div>
+        );
     return segs.map((seg, i) => {
       const node = (
         <div key={`text-${m._id}-${i}`} className="leading-snug mb-6">
