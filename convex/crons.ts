@@ -13,6 +13,12 @@ crons.interval(
   internal.world.stopInactiveWorlds,
 );
 
+crons.interval(
+  'reset default world hourly',
+  { seconds: 60 * 60 },
+  internal.init.resetAndInitDefaultWorld,
+);
+
 crons.interval('restart dead worlds', { seconds: 60 }, internal.world.restartDeadWorlds);
 
 crons.daily('vacuum old entries', { hourUTC: 4, minuteUTC: 20 }, internal.crons.vacuumOldEntries);

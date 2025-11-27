@@ -1,10 +1,10 @@
 import { v } from 'convex/values';
 import { internal } from './_generated/api';
-import { DatabaseReader, MutationCtx, mutation } from './_generated/server';
+import { DatabaseReader, MutationCtx, internalMutation, mutation } from './_generated/server';
 import { Descriptions } from '../data/characters';
 import * as map from '../data/gentle';
 import { insertInput } from './aiTown/insertInput';
-import { Id } from './_generated/dataModel';
+import { Doc, Id } from './_generated/dataModel';
 import { createEngine } from './aiTown/main';
 import { ENGINE_ACTION_DURATION } from './constants';
 import { detectMismatchedLLMProvider } from './util/llm';
@@ -16,125 +16,23 @@ const init = mutation({
   handler: async (ctx, args) => {
     detectMismatchedLLMProvider();
     const { worldStatus, engine } = await getOrCreateDefaultWorld(ctx);
-    if (worldStatus.status !== 'running') {
-      console.warn(
-        `Engine ${engine._id} is not active! Run "npx convex run testing:resume" to restart it.`,
-      );
-      return;
-    }
-    const shouldCreate = await shouldCreateAgents(
-      ctx.db,
-      worldStatus.worldId,
-      worldStatus.engineId,
-    );
-    if (shouldCreate) {
-      const toCreate = args.numAgents !== undefined ? args.numAgents : Descriptions.length;
-      for (let i = 0; i < toCreate; i++) {
-        await insertInput(ctx, worldStatus.worldId, 'createAgent', {
-          descriptionIndex: i % Descriptions.length,
-        });
-      }
-    }
+    await seedDefaultWorld(ctx, worldStatus, engine, args.numAgents);
   },
 });
 export default init;
 
 export const reset = mutation({
   handler: async (ctx) => {
-    const worldStatus = await ctx.db
-      .query('worldStatus')
-      .filter((q) => q.eq(q.field('isDefault'), true))
-      .unique();
-    if (!worldStatus) {
-      return;
-    }
-    const worldId = worldStatus.worldId;
-    const engineId = worldStatus.engineId;
+    await deleteDefaultWorld(ctx);
+  },
+});
 
-    {
-      const docs = await ctx.db
-        .query('messages')
-        .withIndex('worldIdOnly', (q) => q.eq('worldId', worldId))
-        .collect();
-      for (const d of docs) await ctx.db.delete(d._id);
-    }
-    {
-      const docs = await ctx.db
-        .query('maps')
-        .withIndex('worldId', (q) => q.eq('worldId', worldId))
-        .collect();
-      for (const d of docs) await ctx.db.delete(d._id);
-    }
-    {
-      const docs = await ctx.db
-        .query('playerDescriptions')
-        .withIndex('worldId', (q) => q.eq('worldId', worldId))
-        .collect();
-      for (const d of docs) await ctx.db.delete(d._id);
-    }
-    {
-      const docs = await ctx.db
-        .query('agentDescriptions')
-        .withIndex('worldId', (q) => q.eq('worldId', worldId))
-        .collect();
-      for (const d of docs) await ctx.db.delete(d._id);
-    }
-    {
-      const docs = await ctx.db
-        .query('archivedPlayers')
-        .withIndex('worldId', (q) => q.eq('worldId', worldId))
-        .collect();
-      for (const d of docs) await ctx.db.delete(d._id);
-    }
-    {
-      const docs = await ctx.db
-        .query('archivedAgents')
-        .withIndex('worldId', (q) => q.eq('worldId', worldId))
-        .collect();
-      for (const d of docs) await ctx.db.delete(d._id);
-    }
-    {
-      const docs = await ctx.db
-        .query('archivedConversations')
-        .withIndex('worldId', (q) => q.eq('worldId', worldId))
-        .collect();
-      for (const d of docs) await ctx.db.delete(d._id);
-    }
-    {
-      const docs = await ctx.db
-        .query('participatedTogether')
-        .filter((q) => q.eq(q.field('worldId'), worldId))
-        .collect();
-      for (const d of docs) await ctx.db.delete(d._id);
-    }
-
-    const worldDoc = await ctx.db.get(worldId);
-    if (worldDoc) await ctx.db.delete(worldId);
-
-    {
-      const docs = await ctx.db
-        .query('inputs')
-        .withIndex('byInputNumber', (q) => q.eq('engineId', engineId))
-        .collect();
-      for (const d of docs) await ctx.db.delete(d._id);
-    }
-    const engineDoc = await ctx.db.get(engineId);
-    if (engineDoc) await ctx.db.delete(engineId);
-
-    await ctx.db.delete(worldStatus._id);
-
-    {
-      const docs = await ctx.db.query('memories').collect();
-      for (const d of docs) await ctx.db.delete(d._id);
-    }
-    {
-      const docs = await ctx.db.query('memoryEmbeddings').collect();
-      for (const d of docs) await ctx.db.delete(d._id);
-    }
-    {
-      const docs = await ctx.db.query('embeddingsCache').collect();
-      for (const d of docs) await ctx.db.delete(d._id);
-    }
+export const resetAndInitDefaultWorld = internalMutation({
+  handler: async (ctx) => {
+    detectMismatchedLLMProvider();
+    await deleteDefaultWorld(ctx);
+    const { worldStatus, engine } = await getOrCreateDefaultWorld(ctx);
+    await seedDefaultWorld(ctx, worldStatus, engine);
   },
 });
 
@@ -184,6 +82,127 @@ async function getOrCreateDefaultWorld(ctx: MutationCtx) {
     maxDuration: ENGINE_ACTION_DURATION,
   });
   return { worldStatus, engine };
+}
+
+async function deleteDefaultWorld(ctx: MutationCtx) {
+  const worldStatus = await ctx.db
+    .query('worldStatus')
+    .filter((q) => q.eq(q.field('isDefault'), true))
+    .unique();
+  if (!worldStatus) {
+    return;
+  }
+  const worldId = worldStatus.worldId;
+  const engineId = worldStatus.engineId;
+
+  {
+    const docs = await ctx.db
+      .query('messages')
+      .withIndex('worldIdOnly', (q) => q.eq('worldId', worldId))
+      .collect();
+    for (const d of docs) await ctx.db.delete(d._id);
+  }
+  {
+    const docs = await ctx.db
+      .query('maps')
+      .withIndex('worldId', (q) => q.eq('worldId', worldId))
+      .collect();
+    for (const d of docs) await ctx.db.delete(d._id);
+  }
+  {
+    const docs = await ctx.db
+      .query('playerDescriptions')
+      .withIndex('worldId', (q) => q.eq('worldId', worldId))
+      .collect();
+    for (const d of docs) await ctx.db.delete(d._id);
+  }
+  {
+    const docs = await ctx.db
+      .query('agentDescriptions')
+      .withIndex('worldId', (q) => q.eq('worldId', worldId))
+      .collect();
+    for (const d of docs) await ctx.db.delete(d._id);
+  }
+  {
+    const docs = await ctx.db
+      .query('archivedPlayers')
+      .withIndex('worldId', (q) => q.eq('worldId', worldId))
+      .collect();
+    for (const d of docs) await ctx.db.delete(d._id);
+  }
+  {
+    const docs = await ctx.db
+      .query('archivedAgents')
+      .withIndex('worldId', (q) => q.eq('worldId', worldId))
+      .collect();
+    for (const d of docs) await ctx.db.delete(d._id);
+  }
+  {
+    const docs = await ctx.db
+      .query('archivedConversations')
+      .withIndex('worldId', (q) => q.eq('worldId', worldId))
+      .collect();
+    for (const d of docs) await ctx.db.delete(d._id);
+  }
+  {
+    const docs = await ctx.db
+      .query('participatedTogether')
+      .filter((q) => q.eq(q.field('worldId'), worldId))
+      .collect();
+    for (const d of docs) await ctx.db.delete(d._id);
+  }
+
+  const worldDoc = await ctx.db.get(worldId);
+  if (worldDoc) await ctx.db.delete(worldId);
+
+  {
+    const docs = await ctx.db
+      .query('inputs')
+      .withIndex('byInputNumber', (q) => q.eq('engineId', engineId))
+      .collect();
+    for (const d of docs) await ctx.db.delete(d._id);
+  }
+  const engineDoc = await ctx.db.get(engineId);
+  if (engineDoc) await ctx.db.delete(engineId);
+
+  await ctx.db.delete(worldStatus._id);
+
+  {
+    const docs = await ctx.db.query('memories').collect();
+    for (const d of docs) await ctx.db.delete(d._id);
+  }
+  {
+    const docs = await ctx.db.query('memoryEmbeddings').collect();
+    for (const d of docs) await ctx.db.delete(d._id);
+  }
+  {
+    const docs = await ctx.db.query('embeddingsCache').collect();
+    for (const d of docs) await ctx.db.delete(d._id);
+  }
+}
+
+async function seedDefaultWorld(
+  ctx: MutationCtx,
+  worldStatus: Doc<'worldStatus'>,
+  engine: Doc<'engines'>,
+  numAgents?: number,
+) {
+  if (worldStatus.status !== 'running') {
+    console.warn(
+      `Engine ${engine._id} is not active! Run "npx convex run testing:resume" to restart it.`,
+    );
+    return;
+  }
+  const shouldCreate = await shouldCreateAgents(ctx.db, worldStatus.worldId, worldStatus.engineId);
+  if (!shouldCreate) {
+    return;
+  }
+  const toCreate = numAgents !== undefined ? numAgents : Descriptions.length;
+  for (let i = 0; i < toCreate; i++) {
+    await insertInput(ctx, worldStatus.worldId, 'createAgent', {
+      descriptionIndex: i % Descriptions.length,
+    });
+  }
 }
 
 async function shouldCreateAgents(
