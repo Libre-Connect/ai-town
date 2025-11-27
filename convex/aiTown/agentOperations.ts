@@ -490,6 +490,61 @@ export const presenceImport = httpAction(async (ctx, request) => {
   }
 });
 
+export const danmakuMessage = httpAction(async (ctx, request) => {
+  try {
+    const body = (await request.json()) as {
+      worldId?: Id<'worlds'>;
+      name?: string;
+      text?: string;
+    };
+    const worldStatus = await ctx.runQuery(api.world.defaultWorldStatus);
+    const worldId = body.worldId ?? worldStatus?.worldId;
+    if (!worldId) return new Response('No worldId', { status: 400 });
+
+    const name = String(body.name || '').trim();
+    const text = String(body.text || '').trim();
+    if (!name || !text) return new Response('Missing name/text', { status: 400 });
+
+    const worldState = await ctx.runQuery(api.world.worldState, { worldId });
+    const conversations = worldState.world.conversations || [];
+    if (conversations.length === 0) {
+      return new Response(JSON.stringify({ ok: false, reason: 'no_conversation' }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    const conversation = conversations.reduce((best: any, current: any) => {
+      const bestTs = best?.lastMessage?.timestamp ?? best?.created ?? 0;
+      const currTs = current?.lastMessage?.timestamp ?? current?.created ?? 0;
+      return currTs > bestTs ? current : best;
+    }, conversations[0]);
+
+    const descs = await ctx.runQuery(api.world.gameDescriptions, { worldId });
+    const normalized = name.toLowerCase();
+    const playerDesc = (descs.playerDescriptions || []).find(
+      (p: any) => String(p.name || '').trim().toLowerCase() === normalized,
+    );
+    if (!playerDesc) {
+      return new Response(JSON.stringify({ ok: false, reason: 'player_not_found' }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    const playerId = playerDesc.playerId;
+    const messageUuid = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    await ctx.runMutation(api.messages.writeMessage, {
+      worldId,
+      conversationId: conversation.id,
+      playerId,
+      text,
+      messageUuid,
+    });
+    return new Response(JSON.stringify({ ok: true }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } catch (e: any) {
+    return new Response(String(e?.message || e), { status: 500 });
+  }
+});
+
 export const importCharacterAssets = httpAction(async (ctx, request) => {
   try {
     const body = (await request.json()) as {
