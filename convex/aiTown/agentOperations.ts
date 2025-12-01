@@ -45,7 +45,7 @@ const CHARACTER_ASSETS = [
   '234.png',
 ];
 
-const DISCOVERY_GENERATION_PROBABILITY = 0.005;
+const DISCOVERY_GENERATION_PROBABILITY = 0;
 const POLLINATIONS_MODEL = 'flux';
 const POLLINATIONS_TOKEN = 'r5bQfseAxxaO7YNc';
 const IMAGE_MESSAGE_PROBABILITY = 0.12;
@@ -331,18 +331,6 @@ export const agentHandleInventory = internalAction({
         worldId: args.worldId,
         name: 'tradeItem',
         args: { from: player.id, to: nearby.p.id, itemIndex: idx },
-      });
-    } else {
-      const dest = {
-        x: Math.floor(myPos.x + (Math.random() < 0.5 ? 0 : Math.sign(Math.random() - 0.5))),
-        y: Math.floor(myPos.y + (Math.random() < 0.5 ? 0 : Math.sign(Math.random() - 0.5))),
-      };
-      const x = Math.max(0, Math.min(args.map.width - 1, dest.x));
-      const y = Math.max(0, Math.min(args.map.height - 1, dest.y));
-      await ctx.runMutation(api.aiTown.main.sendInput, {
-        worldId: args.worldId,
-        name: 'placeInventoryItem',
-        args: { playerId: player.id, itemIndex: idx, position: { x, y } },
       });
     }
     await ctx.runMutation(api.aiTown.main.sendInput, {
@@ -631,56 +619,10 @@ export const importCharacterAssets = httpAction(async (ctx, request) => {
 
 export const generateImageItem = httpAction(async (ctx, request) => {
   try {
-    const body = (await request.json()) as {
-      worldId?: Id<'worlds'>;
-      playerId: string;
-      area: { x1: number; y1: number; x2: number; y2: number };
-      kind?: 'building' | 'item';
-    };
-    const worldStatus = await ctx.runQuery(api.world.defaultWorldStatus);
-    const worldId = body.worldId ?? worldStatus?.worldId;
-    if (!worldId) return new Response('No worldId', { status: 400 });
-    const { playerId, area } = body;
-    if (!playerId || !area) return new Response('Missing playerId/area', { status: 400 });
-    const w = Math.abs(area.x2 - area.x1) + 1;
-    const h = Math.abs(area.y2 - area.y1) + 1;
-    if (w > 6 || h > 6) return new Response('Area too big', { status: 400 });
-
-    const kind = body.kind ?? (Math.random() < 0.5 ? 'item' : 'building');
-    const sys = 'You are a pixel art assistant. Output only an English prompt, no explanations.';
-    const prompt =
-      kind === 'building'
-        ? 'Pixel art building sprite, top-down RPG style, clean outline, centered on a white grassy field with visible grass texture, never a solid white or blank background, game-ready.'
-        : 'Pixel art item sprite, 1x1 tile, clear silhouette, centered on a white grassy field with visible grass texture, never a solid white or blank background, game-ready.';
-    const { content } = await chatCompletion({
-      messages: [
-        { role: 'system', content: sys },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.7,
-      max_tokens: 100,
-    });
-    const english = String(content || '').trim() || (kind === 'building' ? 'cozy pixel building' : 'cozy pixel item');
-    const imageUrl = pollinationsImageUrl(english);
-
-    const minx = Math.min(area.x1, area.x2);
-    const miny = Math.min(area.y1, area.y2);
-    const cx = Math.floor((area.x1 + area.x2) / 2);
-    const cy = Math.floor((area.y1 + area.y2) / 2);
-    const size = kind === 'building' ? { w: Math.max(3, w), h: Math.max(3, h) } : { w: 1, h: 1 };
-    await ctx.runMutation(api.aiTown.main.sendInput, {
-      worldId,
-      name: 'discoverItem',
-      args: {
-        playerId,
-        item: { name: english, imageUrl },
-        place: kind === 'building' ? { x: minx, y: miny } : { x: cx, y: cy },
-        kind,
-        size,
-      },
-    });
-    return new Response(JSON.stringify({ ok: true, prompt: english, imageUrl }), {
+    await request.json();
+    return new Response(JSON.stringify({ ok: false, disabled: true }), {
       headers: { 'Content-Type': 'application/json' },
+      status: 403,
     });
   } catch (e: any) {
     return new Response(String(e?.message || e), { status: 500 });

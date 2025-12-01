@@ -141,28 +141,7 @@ https://github.com/michalochman/react-pixi-fiber/issues/145#issuecomment-5315492
           ref={scrollViewRef}
         >
           {game && (
-            <div className="box mb-4">
-              <h2 className="bg-brown-700 text-lg text-center">建造 / 探索</h2>
-              <div className="grid grid-cols-6 gap-2 p-2 bg-brown-200">
-                {[...
-                  (function(){
-                    const items: Array<{ name: string; imageUrl: string; created: number } & { owner: string }>=[];
-                    for (const [pid, pdesc] of game.playerDescriptions.entries()) {
-                      const player = game.world.players.get(pid);
-                      if (!player || !(player as any).inventory) continue;
-                      const inv = (player as any).inventory as Array<{ name: string; imageUrl: string; created: number }>;
-                      for (const it of inv) items.push({ ...it, owner: pdesc.name });
-                    }
-                    return items.sort((a,b)=> b.created - a.created).slice(0, 24);
-                  })()
-                ].map((item, idx) => (
-                  <div key={`inv-feed-${idx}`} className="flex flex-col items-center">
-                    <img src={item.imageUrl} className="w-8 h-8" />
-                    <span className="text-[10px] text-black mt-1 truncate max-w-[60px]" title={`${item.owner}：${item.name}`}>{item.name}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <></>
           )}
           {worldId && <ChatFeed worldId={worldId} scrollViewRef={scrollViewRef} />}
         </div>

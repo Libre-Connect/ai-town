@@ -347,28 +347,6 @@ export const playerInputs = {
       layer: v.optional(v.number()),
     },
     handler: (game, now, args) => {
-      const pid = parseGameId('players', args.playerId);
-      const player = game.world.players.get(pid);
-      if (!player) throw new Error(`Invalid player ID ${pid}`);
-      const x = Math.floor(args.position.x);
-      const y = Math.floor(args.position.y);
-      if (x < 0 || y < 0 || x >= game.worldMap.width || y >= game.worldMap.height) {
-        throw new Error(`Position out of bounds`);
-      }
-      const dist = Math.abs(player.position.x - x) + Math.abs(player.position.y - y);
-      if (dist > 3) {
-        throw new Error('Too far to build');
-      }
-      const layerIdx = args.layer ?? 0;
-      while (game.worldMap.objectTiles.length <= layerIdx) {
-        const layer = Array.from({ length: game.worldMap.width }, () =>
-          Array.from({ length: game.worldMap.height }, () => -1),
-        );
-        game.worldMap.objectTiles.push(layer as any);
-      }
-      game.worldMap.objectTiles[layerIdx][x][y] = args.tileIndex;
-      game.descriptionsModified = true;
-      player.activity = { description: 'build', until: now + 3000 };
       return null;
     },
   }),
@@ -425,28 +403,6 @@ export const playerInputs = {
       position: point,
     },
     handler: (game, now, args) => {
-      const pid = parseGameId('players', args.playerId);
-      const player = game.world.players.get(pid);
-      if (!player) throw new Error(`Invalid player ID ${pid}`);
-      const idx = Math.floor(args.itemIndex);
-      if (!player.inventory || idx < 0 || idx >= player.inventory.length) throw new Error('Invalid item');
-      const x = Math.floor(args.position.x);
-      const y = Math.floor(args.position.y);
-      if (x < 0 || y < 0 || x >= game.worldMap.width || y >= game.worldMap.height) {
-        throw new Error('Position out of bounds');
-      }
-      const item = player.inventory.splice(idx, 1)[0];
-      game.worldMap.animatedSprites.push({
-        x: x * game.worldMap.tileDim,
-        y: y * game.worldMap.tileDim,
-        w: game.worldMap.tileDim,
-        h: game.worldMap.tileDim,
-        layer: 0,
-        sheet: item.imageUrl,
-        animation: 'default',
-      } as any);
-      game.descriptionsModified = true;
-      player.activity = { description: 'build', until: now + 3000 };
       return null;
     },
   }),
@@ -473,31 +429,6 @@ export const playerInputs = {
       size: v.optional(v.object({ w: v.number(), h: v.number() })),
     },
     handler: (game, now, args) => {
-      const pid = parseGameId('players', args.playerId);
-      const player = game.world.players.get(pid);
-      if (!player) throw new Error(`Invalid player ID ${pid}`);
-      player.inventory.push({ name: args.item.name, imageUrl: args.item.imageUrl, created: now });
-      if (args.place) {
-        const x = Math.floor(args.place.x);
-        const y = Math.floor(args.place.y);
-        if (x < 0 || y < 0 || x >= game.worldMap.width || y >= game.worldMap.height) {
-          throw new Error('place out of bounds');
-        }
-        const cellsW = args.size?.w ?? 1;
-        const cellsH = args.size?.h ?? 1;
-        game.worldMap.animatedSprites.push({
-          x: x * game.worldMap.tileDim,
-          y: y * game.worldMap.tileDim,
-          w: cellsW * game.worldMap.tileDim,
-          h: cellsH * game.worldMap.tileDim,
-          layer: 0,
-          sheet: args.item.imageUrl,
-          animation: 'default',
-        } as any);
-        game.descriptionsModified = true;
-      }
-      const kind = args.kind ?? 'item';
-      player.activity = { description: kind === 'building' ? 'build' : 'explore', until: now + 3000 };
       return null;
     },
   }),
